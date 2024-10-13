@@ -23,6 +23,12 @@ jobs:
       with:
         version: v3.4.0
 
+    - name: Install chart-releaser
+      run: |
+        wget https://github.com/helm/chart-releaser/releases/download/v1.4.0/chart-releaser_1.4.0_linux_amd64.tar.gz
+        tar xzvf chart-releaser_1.4.0_linux_amd64.tar.gz cr
+        sudo mv cr /usr/local/bin/cr
+
     - name: Package and Index
       run: |
         mkdir -p .cr-release-packages
@@ -32,6 +38,7 @@ jobs:
     - name: Push to GitHub Pages branch
       uses: peaceiris/actions-gh-pages@v3
       with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: .
         publish_branch: gh-pages
         force_orphan: true
