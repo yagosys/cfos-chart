@@ -12,10 +12,16 @@ spec:
   selector:
     matchLabels:
       {{- include "cfos.selectorLabels" . | nindent 6 }}
+      {{- with .Values.labels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
   template:
     metadata:
       labels:
         {{- include "cfos.selectorLabels" . | nindent 8 }}
+        {{- with .Values.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.nodeSelector }}
       nodeSelector:
