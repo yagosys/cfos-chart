@@ -7,4 +7,5 @@ helm search repo cfos-chart
 
 helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos
 
-
+## check detail of chart
+helm show all cfos-chart/cfos
