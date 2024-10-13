@@ -1,0 +1,22 @@
+   name: Publish Helm chart
+
+   on:
+     push:
+       branches:
+         - main
+
+   jobs:
+     publish:
+       runs-on: ubuntu-latest
+       steps:
+       - uses: actions/checkout@v2
+
+       - name: Publish Helm chart
+         uses: stefanprodan/helm-gh-pages@master
+         with:
+           token: ${{ secrets.GITHUB_TOKEN }}
+           charts_dir: .
+           charts_url: https://yagosys.github.io/cfos-chart
+           owner: yagosys
+           repository: cfos-chart
+           branch: gh-pages
