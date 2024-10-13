@@ -1,22 +1,37 @@
-   name: Publish Helm chart
+name: Publish Helm chart
 
-   on:
-     push:
-       branches:
-         - main
+on:
+  push:
+    branches:
+      - main
 
-   jobs:
-     publish:
-       runs-on: ubuntu-latest
-       steps:
-       - uses: actions/checkout@v2
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
 
-       - name: Publish Helm chart
-         uses: stefanprodan/helm-gh-pages@master
-         with:
-           token: ${{ secrets.GITHUB_TOKEN }}
-           charts_dir: .
-           charts_url: https://yagosys.github.io/cfos-chart
-           owner: yagosys
-           repository: cfos-chart
-           branch: gh-pages
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+    - name: Install Helm
+      uses: azure/setup-helm@v1
+      with:
+        version: v3.4.0
+
+    - name: Package and Index
+      run: |
+        mkdir -p .cr-release-packages
+        helm package cfos -d .cr-release-packages
+        cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/
+
+    - name: Push to GitHub Pages branch
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        publish_dir: .
+        publish_branch: gh-pages
+        force_orphan: true
