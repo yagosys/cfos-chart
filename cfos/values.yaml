@@ -47,4 +47,5 @@ ingress:
 autoscaling:
   enabled: false
 
-labels: {}
+labels:
+  app: firewall
