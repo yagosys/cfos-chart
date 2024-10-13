@@ -1,0 +1,48 @@
+replicaCount: 1
+
+image:
+  repository: public.ecr.aws/t8s9q7/q9/andy2024public
+  tag: cfosx86257
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: cfos-serviceaccount
+
+nodeSelector:
+  security: "true"
+
+initContainers:
+  enabled: true
+  image:
+    repository: busybox
+    tag: latest
+    pullPolicy: IfNotPresent
+
+dnsConfig:
+  nameserver: "10.96.0.10"
+  searchDomains:
+    - "default.svc.cluster.local"
+    - "svc.cluster.local"
+    - "cluster.local"
+
+securityContext:
+  allowPrivilegeEscalation: true
+  privileged: true
+  capabilities:
+    add: 
+      - NET_ADMIN
+      - SYS_ADMIN
+      - NET_RAW
+
+service:
+  type: ClusterIP
+  port: 443
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: false

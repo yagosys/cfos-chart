@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cfos.fullname" . }}
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cfos.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cfos.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- if .Values.initContainers.enabled }}
+      initContainers:
+      - name: init-myservice
+        image: "{{ .Values.initContainers.image.repository }}:{{ .Values.initContainers.image.tag }}"
+        imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
+        command:
+        - sh
+        - -c
+        - |
+          echo "nameserver {{ .Values.dnsConfig.nameserver }}" > /mnt/resolv.conf
+          echo "search {{ join " " .Values.dnsConfig.searchDomains }}" >> /mnt/resolv.conf;
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        volumeMounts:
+        - name: resolv-conf
+          mountPath: /mnt
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "public.ecr.aws/t8s9q7q9/andy2024public:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        ports:
+        - containerPort: {{ .Values.service.port }}
+        volumeMounts:
+        - mountPath: /data
+          name: data-volume
+        - mountPath: /etc/resolv.conf
+          name: resolv-conf
+          subPath: resolv.conf
+      volumes:
+      - name: data-volume
+        emptyDir: {}
+      - name: resolv-conf
+        emptyDir: {}
+      dnsPolicy: ClusterFirst
