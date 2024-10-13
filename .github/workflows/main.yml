@@ -31,16 +31,17 @@ jobs:
 
     - name: Package and Release
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p .cr-release-packages
         helm package cfos -d .cr-release-packages
-        cr upload -o yagosys -r cfos-chart
-        cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/
+        cr upload -o yagosys -r cfos-chart --token "$CR_TOKEN"
+        cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/ --token "$CR_TOKEN"
 
     - name: Push to GitHub Pages branch
       uses: peaceiris/actions-gh-pages@v3
       with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: .
         publish_branch: gh-pages
         force_orphan: true
