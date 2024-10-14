@@ -22,6 +22,13 @@ spec:
         {{- with .Values.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.appArmor.enabled }}
+        container.apparmor.security.beta.kubernetes.io/{{ .Chart.Name }}: {{ .Values.appArmor.profile }}
+        {{- end }}
     spec:
       {{- with .Values.nodeSelector }}
       nodeSelector:

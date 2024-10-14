@@ -32,12 +32,18 @@ dnsConfig:
 
 securityContext:
   allowPrivilegeEscalation: true
-  privileged: true
+  privileged: false
   capabilities:
     add: 
       - NET_ADMIN
       - SYS_ADMIN
       - NET_RAW
+
+appArmor:
+  enabled: false
+  profile: "unconfined"
+
+podAnnotations: {}
 
 service:
   type: ClusterIP
