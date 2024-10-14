@@ -146,29 +146,35 @@ route-manager-zfmsh                1/1     Running   0          54s
 
 ```
 ## apply cfos license via configmap file
-
+```bash
 kubectl apply -f cfos_license.yaml
+```
 
 ### Verify the license import 
 ```bash
-kubectl logs -f po/cfos7210250-deployment-new-5x9tc
-Defaulted container "cfos" out of: cfos, init-myservice (init)
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl logs -f po/$podname -c cfos
 
 System is starting...
 
-Firmware version is 7.2.1.0257
+Firmware version is 7.2.1.0255
 Preparing environment...
-failed to get sn for debug zone
 Verifying license...
-Setting up CMDB...
 WARNING: System is running in restricted mode due to lack of valid license!
 Starting services...
 System is ready.
 
-INFO: 2024/10/14 20:56:00 received configmap name: fos-license, labels: map[app:fos category:license], version: 3095
-INFO: 2024/10/14 20:56:02 run event 'license' handler
-INFO: 2024/10/14 20:56:02 importing license...
-INFO: 2024/10/14 20:56:02 license is imported successfuly!
+2024-10-14_22:47:50.11804 ok: run: /etc/services/certd: (pid 131) 2s, normally down
+2024-10-14_22:48:07.55389 INFO: 2024/10/14 22:48:07 received a new fos configmap
+2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 configmap name: fos-license, labels: map[app:fos category:license]
+2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 got a fos license
+2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 importing license...
+2024-10-14_22:48:07.56238 INFO: 2024/10/14 22:48:07 license is imported successfuly!
+2024-10-14_22:48:21.23682 ok: run: /etc/services/certd: (pid 131) 33s, normally down
+2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 received a new fos configmap
+2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 configmap name: fos-license, labels: map[app:fos category:license]
+2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 got a fos license
+
 ```
 ## create firewall policy via configmap file
 
@@ -176,7 +182,7 @@ INFO: 2024/10/14 20:56:02 license is imported successfuly!
 
 kubectl apply -f net1tointernetfirewallpolicy.yaml
 ```
-the content of policy 
+the content of firewall policy configmap
 ```bash
 apiVersion: v1
 kind: ConfigMap
@@ -271,8 +277,8 @@ data:
 ### Verify the firewall policy
 
 ```bash
-kubectl exec -it po/cfos7210250-deployment-new-5x9tc -- more /data/cmdb/config/firewall/policy.json
-Defaulted container "cfos" out of: cfos, init-myservice (init)
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$podname -c cfos -- more /data/cmdb/config/firewall/policy.json
 [
     {
         "policyid": 100,
@@ -364,7 +370,6 @@ pods=$(kubectl get pods -l protectedby=cfos -o jsonpath='{.items[*].metadata.nam
 for pod in $pods; do
     echo "Running ping in pod: $pod"
     if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 1.1.1.1 > /dev/null 2>&1'; then
-#    if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 192.168.200.250 '; then
         echo "Ping succeeded in pod: $pod"
     else
         echo "Ping failed in pod: $pod"
@@ -374,7 +379,7 @@ for pod in $pods; do
     echo "---"
 done
 
-echo "Ping completed in all pods."
+echo "Ping completed in all pods to address 1.1.1.1."
 ```
 ## scale protected pod to more numbers 
 ```bash
@@ -441,7 +446,7 @@ Ping succeeded in pod: diag-5bc9c56477-2d2lc
 ....
 
 ---
-Ping completed in all pods.
+Ping completed in all pods to address 1.1.1.1.
 
 ```
 
@@ -453,7 +458,7 @@ Ping completed in all pods.
 # Infinite loop to continuously run tests
 while true; do
     # Get all pods with label protectedby=cfos
-    pods=$(kubectl get pod -l protectedby=cfos -o jsonpath='{.items[*].metadata.name}')
+    pods=$(kubectl get pod -l protectedby=cfos -o custom-columns=NAME:.metadata.name --no-headers)
 
     # Run commands in parallel using background processes for each pod
     for pod in $pods; do
@@ -493,8 +498,10 @@ done
 kubectl get pod -l app=firewall
 NAME                               READY   STATUS    RESTARTS      AGE
 cfos7210250-deployment-new-5x9tc   1/1     Running   1 (39m ago)   41m
-kubectl exec -it po/cfos7210250-deployment-new-5x9tc -- sh
-Defaulted container "cfos" out of: cfos, init-myservice (init)
+```
+```bash
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$podname -c cfos -- sh
 
 # cd /var/log/log/
 # ls app.0
