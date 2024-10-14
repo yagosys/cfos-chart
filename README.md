@@ -313,6 +313,34 @@ Defaulted container "cfos" out of: cfos, init-myservice (init)
 ]%
 ```
 ## create procted application pod with label protectedby=cfos 
+cat <<EOF | tee diag.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diag
+  labels:
+    app: diag
+    cfos: protected
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diag
+  template:
+    metadata:
+      labels:
+        app: diag
+        protectedby: cfos
+    spec:
+      nodeSelector:
+        app: "true"
+      containers:
+      - name: diag
+        image: praqma/network-multitool:latest
+        securityContext:
+          privileged: false
+
+EOF
 kubectl apply -f diag.yaml
 
 ### check protected application deployment
