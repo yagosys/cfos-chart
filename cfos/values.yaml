@@ -57,3 +57,24 @@ autoscaling:
 
 labels:
   app: firewall
+
+routeManager:
+  enabled: true
+  image:
+    repository: public.ecr.aws/t8s9q7q9/andy2024public
+    tag: cni0.1.12
+    pullPolicy: Always
+  serviceAccount:
+    create: true
+    name: cni-service-account
+  env:
+    INTERFACE_TYPE: "vxlan"
+    FIREWALL_LABEL: "app=firewall"
+    PROTECTED_LABEL: "protectedby=cfos"
+    FIREWALL_VXLAN_IP: "192.168.200.250"
+    PROTECTED_VXLAN_BASE_IP: "192.168.200."
+    FIREWALL_VLAN_IP: "192.168.200.250"
+    VLAN_ID: "100"
+    VXLAN_ID: "42"
+    ROUTE_DST: "0.0.0.0/1,128.0.0.0/1"
+    LOG_LEVEL: "extendedDebug"

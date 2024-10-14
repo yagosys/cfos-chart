@@ -1,0 +1,72 @@
+{{- if .Values.routeManager.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.routeManager.serviceAccount.name }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cni-pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create", "get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cni-pod-reader-binding
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.routeManager.serviceAccount.name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cni-pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: route-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: route-manager
+  template:
+    metadata:
+      labels:
+        app: route-manager
+    spec:
+      nodeSelector:
+        {{- with .Values.routeManager.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      serviceAccountName: {{ .Values.routeManager.serviceAccount.name }}
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: route-manager
+        image: "{{ .Values.routeManager.image.repository }}:{{ .Values.routeManager.image.tag }}"
+        imagePullPolicy: {{ .Values.routeManager.image.pullPolicy }}
+        securityContext:
+          privileged: true
+        env:
+        {{- range $key, $value := .Values.routeManager.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        - name: NODE
