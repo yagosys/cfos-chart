@@ -69,4 +69,8 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
-        - name: NODE
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+{{- end }}
