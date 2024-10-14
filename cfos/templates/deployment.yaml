@@ -1,5 +1,6 @@
+{{- $kind := .Values.deployment.kind | default "DaemonSet" -}}
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ $kind }}
 metadata:
   name: {{ include "cfos.fullname" . }}
   labels:
@@ -8,7 +9,12 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
+  {{- if eq $kind "Deployment" }}
   replicas: {{ .Values.replicaCount }}
+  {{- else }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy | default "RollingUpdate" }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "cfos.selectorLabels" . | nindent 6 }}

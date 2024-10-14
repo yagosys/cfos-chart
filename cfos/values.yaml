@@ -1,4 +1,7 @@
-replicaCount: 1
+deployment:
+  kind: DaemonSet  # Can be set to "Deployment" if needed
+replicaCount: 1    # Only used if kind is Deployment
+updateStrategy: RollingUpdate
 
 image:
   repository: public.ecr.aws/t8s9q7/q9/andy2024public
