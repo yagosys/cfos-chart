@@ -10,6 +10,8 @@ fullnameOverride: ""
 serviceAccount:
   create: true
   name: cfos-serviceaccount
+  annotations: {}
+  imagePullSecrets: []
 
 nodeSelector:
   security: "true"
