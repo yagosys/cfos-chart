@@ -5,7 +5,7 @@ updateStrategy: RollingUpdate
 
 image:
   repository: public.ecr.aws/t8s9q7/q9/andy2024public
-  tag: cfosx86257
+  tag: cfosx86v255
 
 nameOverride: ""
 fullnameOverride: ""
