@@ -313,6 +313,7 @@ Defaulted container "cfos" out of: cfos, init-myservice (init)
 ]%
 ```
 ## create procted application pod with label protectedby=cfos 
+```bash
 cat <<EOF | tee diag.yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -343,6 +344,7 @@ spec:
 EOF
 kubectl apply -f diag.yaml
 
+```
 ### check protected application deployment
 ```bash
 kubectl get pod -l protectedby=cfos
