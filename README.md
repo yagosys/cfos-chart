@@ -116,12 +116,19 @@ aws eks list-access-entries --cluster-name ${CLUSTERNAME} --region $AWS_REGION
 ### Verify  the cluster 
 ```bash
 kubectl get node -l app=true
+```
+result
+```
 NAME                             STATUS   ROLES    AGE    VERSION
 ip-10-244-103-112.ec2.internal   Ready    <none>   3m6s   v1.30.4-eks-a737599
+```
+```bash
 kubectl get node -l security=true
+```
+result
+```
 NAME                             STATUS   ROLES    AGE     VERSION
 ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
-
 ```
 
 ## install cfos DaemonSet and agent 
@@ -135,10 +142,16 @@ helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set appArmor
 ### verify the deployment
 ```
 helm list
+```
+result
+```
 NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART     	APP VERSION
 cfos7210250-deployment-new	default  	1       	2024-10-14 15:54:40.697525 -0500 CDT	deployed	cfos-0.1.3	7.2.1.257
-
+```bash
 kubectl get pod
+```
+result
+```
 NAME                               READY   STATUS    RESTARTS   AGE
 cfos7210250-deployment-new-5x9tc   1/1     Running   0          54s
 route-manager-6v9g9                1/1     Running   0          54s
@@ -154,6 +167,9 @@ kubectl apply -f cfos_license.yaml
 ```bash
 podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 kubectl logs -f po/$podname -c cfos
+```
+result
+```
 
 System is starting...
 
@@ -179,11 +195,8 @@ System is ready.
 ## create firewall policy via configmap file
 
 ```bash
-
-kubectl apply -f net1tointernetfirewallpolicy.yaml
-```
-the content of firewall policy configmap
-```bash
+filename="net1tointernetfirewallpolicy.yaml"
+cat << 'EOF' | tee > $filename
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -272,6 +285,8 @@ data:
             set logtraffic all
         next
     end
+EOF
+kubectl apply -f $filename
 
 ```
 ### Verify the firewall policy
@@ -279,6 +294,9 @@ data:
 ```bash
 podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -it po/$podname -c cfos -- more /data/cmdb/config/firewall/policy.json
+```
+result
+```
 [
     {
         "policyid": 100,
@@ -320,7 +338,8 @@ kubectl exec -it po/$podname -c cfos -- more /data/cmdb/config/firewall/policy.j
 ```
 ## create procted application pod with label protectedby=cfos 
 ```bash
-cat <<EOF | tee diag.yaml
+filename="protectedpod.yaml"
+cat <<EOF | tee > $filename
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -348,23 +367,24 @@ spec:
           privileged: false
 
 EOF
-kubectl apply -f diag.yaml
+kubectl apply -f $filename
 
 ```
 ### check protected application deployment
 ```bash
 kubectl get pod -l protectedby=cfos
+```
+result
+```
 NAME                    READY   STATUS    RESTARTS   AGE
 diag-5bc9c56477-tclq9   1/1     Running   0          22s
 ```
 ## check procted pod whether able to reach internet through cFOS as nexthop
-pingall.sh
 ```bash
-
+filename="pingalltest.sh"
+cat << 'EOF' | tee > $filename
 #!/bin/bash
 
-# Get all pods with label protectedby=cfos
-# this is the content of file pingall.sh
 pods=$(kubectl get pods -l protectedby=cfos -o jsonpath='{.items[*].metadata.name}')
 
 for pod in $pods; do
@@ -380,6 +400,10 @@ for pod in $pods; do
 done
 
 echo "Ping completed in all pods to address 1.1.1.1."
+EOF
+chmod +x $filename
+./$filename
+
 ```
 ## scale protected pod to more numbers 
 ```bash
@@ -388,12 +412,13 @@ kubectl scale deployment diag --replicas=20
 ### verify scale 
 ```bash
 kubectl get deployment diag
+```
 NAME   READY   UP-TO-DATE   AVAILABLE   AGE
 diag   20/20   20           20          4m24s
 ```
 
 ## Check all protected pod for connectivites
-./pingall.sh
+./pingalltest.sh
 
 ## scale application node
 scale worker node for create more protected pod 
@@ -402,7 +427,7 @@ scale worker node for create more protected pod
 eksctl scale nodegroup pimco-eks-ng-app -N 2 --cluster pimco
 ```
 result
-```bash
+```
 2024-10-15 08:06:34 [ℹ]  scaling nodegroup "pimco-eks-ng-app" in cluster pimco
 2024-10-15 08:06:38 [ℹ]  initiated scaling of nodegroup
 2024-10-15 08:06:38 [ℹ]  to see the status of the scaling run `eksctl get nodegroup --cluster pimco --region us-east-1 --name pimco-eks-ng-app`
@@ -424,6 +449,9 @@ kubectl scale deployment diag --replicas=60
 
 ```bash
 kubectl get deployment diag
+```
+result
+```
 NAME   READY   UP-TO-DATE   AVAILABLE   AGE
 diag   60/60   60           60          10m
 ```
@@ -431,11 +459,11 @@ diag   60/60   60           60          10m
 ## check connectivity again
 
 ```bash
-./pingall.sh
+./pingalltest.sh
 ```
 ### Result
 ```bash
- demoeksmultinode git:(main) ✗ ./pingall.sh
+./pingalltest.sh
 Running ping in pod: diag-5bc9c56477-24hzl
 Ping succeeded in pod: diag-5bc9c56477-24hzl
 ---
@@ -453,14 +481,13 @@ Ping completed in all pods to address 1.1.1.1.
 ## test with real attack traffic
 
 ```bash
+filename="cfos_test_traffic.sh"
+cat << 'EOF' | tee > $filename
 #!/bin/bash -xe
-
-# Infinite loop to continuously run tests
 while true; do
     # Get all pods with label protectedby=cfos
     pods=$(kubectl get pod -l protectedby=cfos -o custom-columns=NAME:.metadata.name --no-headers)
 
-    # Run commands in parallel using background processes for each pod
     for pod in $pods; do
         (
             printf "\e[1;32m   Running tests on pod: $pod \e[0m\n"
@@ -483,7 +510,7 @@ while true; do
 
             printf "\e[1;32m   Test download EICAR test file \e[0m\n"
             kubectl exec -it "$pod" -- sh -c "wget -c https://secure.eicar.org/eicar_com.zip --no-check-certificate" || true
-        )
+        ) 
     done
 
 
@@ -491,6 +518,11 @@ while true; do
     echo "Waiting for 5 seconds..."
     sleep 5
 done
+
+EOF
+chmod +x $filename
+./$filename
+
 ```
 ### Check Result log
 
