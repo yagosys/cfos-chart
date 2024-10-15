@@ -11,7 +11,7 @@ below is a full example which use cfos chart to demo cFOS egress security with e
 
 AWS_REGION="us-east-1"
 EKSVERSION="1.30"
-CLUSTERNAME="pimco"
+CLUSTERNAME="democluster"
 PODCIDR="10.244.0.0/16"
 AVAILABILITY_ZONES=$(aws ec2 describe-availability-zones --region $AWS_REGION --query "AvailabilityZones[?State=='available'].ZoneName" --output text | tr '\t' ',' | cut -d',' -f1-2)
 filename="way3cluster.yaml"
@@ -147,6 +147,8 @@ result
 ```
 NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART     	APP VERSION
 cfos7210250-deployment-new	default  	1       	2024-10-14 15:54:40.697525 -0500 CDT	deployed	cfos-0.1.3	7.2.1.257
+```
+
 ```bash
 kubectl get pod
 ```
@@ -413,24 +415,28 @@ kubectl scale deployment diag --replicas=20
 ```bash
 kubectl get deployment diag
 ```
+
+```
 NAME   READY   UP-TO-DATE   AVAILABLE   AGE
 diag   20/20   20           20          4m24s
 ```
 
 ## Check all protected pod for connectivites
+```bash
 ./pingalltest.sh
+```
 
 ## scale application node
 scale worker node for create more protected pod 
 
 ```bash
-eksctl scale nodegroup pimco-eks-ng-app -N 2 --cluster pimco
+eksctl scale nodegroup democluster-eks-ng-app -N 2 --cluster $CLUSTERNAME
 ```
 result
 ```
-2024-10-15 08:06:34 [ℹ]  scaling nodegroup "pimco-eks-ng-app" in cluster pimco
+2024-10-15 08:06:34 [ℹ]  scaling nodegroup "democluster-eks-ng-app" in cluster democluster
 2024-10-15 08:06:38 [ℹ]  initiated scaling of nodegroup
-2024-10-15 08:06:38 [ℹ]  to see the status of the scaling run `eksctl get nodegroup --cluster pimco --region us-east-1 --name pimco-eks-ng-app`
+2024-10-15 08:06:38 [ℹ]  to see the status of the scaling run `eksctl get nodegroup --cluster $CLUSTERNAME --region us-east-1 --name democluster-eks-ng-app`
 kubectl get node
 NAME                             STATUS   ROLES    AGE   VERSION
 ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
@@ -445,7 +451,9 @@ ip-10-244-69-56.ec2.internal     Ready    <none>   40s   v1.30.4-eks-a737599
 ```
 
 ## scale protected pod to more numbers 
+```bash
 kubectl scale deployment diag --replicas=60
+```
 
 ```bash
 kubectl get deployment diag
@@ -564,4 +572,22 @@ date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384"
 date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.91 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=132 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=38028 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129126 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
 date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.44 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=138 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=41406 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129129 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
 date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.64 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=133 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=58336 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129130 msg="applications3: Bash.Fun#
+```
+## uninstall cFOS
+
+```bash
+helm list 
+helm uninstall cfos7210250-deployment-new 
+```
+
+## remove protected pod
+
+```bash
+kubectl delete deployment diag
+```
+
+## remove eks cluster
+
+```bash
+eksclt delete cluster --name $CLUSTERNAME
 ```
