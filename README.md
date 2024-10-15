@@ -202,6 +202,28 @@ kubectl exec -it po/$podname -c cfos -- ip -d link show vxlan0
 ```
 if vxlan0 interface not ready, stop here to check the reason. 
 
+## Wait until cFOS got license applied
+
+```bash
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$podname -c cfos -- /bin/cli 
+
+```
+then login and check license
+```bash
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$podname -c cfos -- /bin/cli
+```
+then
+```
+User: admin
+Password:
+cFOS # diagnose sys status
+Version: cFOS v7.2.1 build0255
+Serial-Number: CFOSVLTMXXXXX
+System time: Tue Oct 15 2024 03:08:58 GMT+0000 (UTC)
+```
+
 ## create firewall policy via configmap file
 
 ```bash
