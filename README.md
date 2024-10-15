@@ -194,6 +194,14 @@ System is ready.
 2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 got a fos license
 
 ```
+### Verify cFOS has vxlan interface ready 
+
+```bash
+podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$podname -c cfos -- ip -d link show vxlan0
+```
+if vxlan0 interface not ready, stop here to check the reason. 
+
 ## create firewall policy via configmap file
 
 ```bash
@@ -437,12 +445,23 @@ result
 2024-10-15 08:06:34 [ℹ]  scaling nodegroup "democluster-eks-ng-app" in cluster democluster
 2024-10-15 08:06:38 [ℹ]  initiated scaling of nodegroup
 2024-10-15 08:06:38 [ℹ]  to see the status of the scaling run `eksctl get nodegroup --cluster $CLUSTERNAME --region us-east-1 --name democluster-eks-ng-app`
+```
+check scale result
+```bash
 kubectl get node
+```
+result 
+```
 NAME                             STATUS   ROLES    AGE   VERSION
 ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
 ip-10-244-117-209.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
 ip-10-244-69-56.ec2.internal     Ready    <none>   31s   v1.30.4-eks-a737599
+```
+```bash
 kubectl get node -l app=true
+```
+result
+```
 NAME                             STATUS   ROLES    AGE   VERSION
 ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
 ip-10-244-69-56.ec2.internal     Ready    <none>   40s   v1.30.4-eks-a737599
@@ -536,6 +555,9 @@ chmod +x $filename
 
 ```bash
 kubectl get pod -l app=firewall
+```
+result
+```
 NAME                               READY   STATUS    RESTARTS      AGE
 cfos7210250-deployment-new-5x9tc   1/1     Running   1 (39m ago)   41m
 ```
@@ -589,5 +611,5 @@ kubectl delete deployment diag
 ## remove eks cluster
 
 ```bash
-eksclt delete cluster --name $CLUSTERNAME
+eksctl delete cluster --name $CLUSTERNAME
 ```
