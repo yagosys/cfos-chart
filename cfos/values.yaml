@@ -65,7 +65,7 @@ routeManager:
   enabled: true
   image:
     repository: public.ecr.aws/t8s9q7q9/andy2024public
-    tag: cni0.1.13
+    tag: cni0.1.17p4
     pullPolicy: Always
   serviceAccount:
     create: true
