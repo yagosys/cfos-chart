@@ -40,6 +40,7 @@ jobs:
         CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p .cr-release-packages
+	mkdir -p .cr-index
         helm package cfos -d .cr-release-packages
         cr upload -o yagosys -r cfos-chart --token "$CR_TOKEN" --skip-existing
         
@@ -49,11 +50,14 @@ jobs:
         # Update index file
         cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/ --token "$CR_TOKEN"
 
+        # Ensure index.yaml is in the correct location
+        mv .cr-index/index.yaml .cr-index/index.yaml || true
+
     - name: Move files for GitHub Pages
       run: |
         mkdir -p gh-pages
-        cp .cr-release-packages/*.tgz gh-pages/
-        cp .cr-index/index.yaml gh-pages/
+        cp .cr-release-packages/*.tgz gh-pages/ || true 
+        cp .cr-index/index.yaml gh-pages/ || true
         touch gh-pages/.nojekyll
 
     - name: Push to GitHub Pages branch
