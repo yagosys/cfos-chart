@@ -29,6 +29,12 @@ jobs:
         tar xzvf chart-releaser_1.4.0_linux_amd64.tar.gz cr
         sudo mv cr /usr/local/bin/cr
 
+    - name: Checkout gh-pages
+      uses: actions/checkout@v2
+      with:
+        ref: gh-pages
+        path: gh-pages-branch
+
     - name: Package and Release
       env:
         CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -37,20 +43,17 @@ jobs:
         helm package cfos -d .cr-release-packages
         cr upload -o yagosys -r cfos-chart --token "$CR_TOKEN" --skip-existing
         
-        # Create index file manually if it doesn't exist
-        if [ ! -f .cr-index/index.yaml ]; then
-          mkdir -p .cr-index
-          helm repo index .cr-release-packages --url https://yagosys.github.io/cfos-chart/ --merge .cr-index/index.yaml
-          mv .cr-release-packages/index.yaml .cr-index/index.yaml
-        else
-          cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/ --token "$CR_TOKEN"
-        fi
+        # Merge new and existing packages
+        cp gh-pages-branch/*.tgz .cr-release-packages/ || true
+        
+        # Update index file
+        cr index -o yagosys -r cfos-chart -c https://yagosys.github.io/cfos-chart/ --token "$CR_TOKEN"
 
     - name: Move files for GitHub Pages
       run: |
         mkdir -p gh-pages
-        cp .cr-release-packages/*.tgz gh-pages/ || true
-        cp .cr-index/index.yaml gh-pages/ || true
+        cp .cr-release-packages/*.tgz gh-pages/
+        cp .cr-index/index.yaml gh-pages/
         touch gh-pages/.nojekyll
 
     - name: Push to GitHub Pages branch
@@ -58,4 +61,4 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./gh-pages
-        force_orphan: true
+        # Remove force_orphan option
