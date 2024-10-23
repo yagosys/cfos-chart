@@ -4,8 +4,8 @@ replicaCount: 1    # Only used if kind is Deployment
 updateStrategy: RollingUpdate
 
 image:
-  repository: public.ecr.aws/t8s9q7/q9/andy2024public
-  tag: cfosx86v255
+  repository: public.ecr.aws/t8s9q7q9/andy2024public
+  tag: cfosx86257
 
 resources:
   requests:
