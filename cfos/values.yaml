@@ -1,5 +1,5 @@
 deployment:
-  kind: DaemonSet  # Can be set to "Deployment" if needed
+  kind: Deployment  # Can be set to "Deployment" if needed
 replicaCount: 1    # Only used if kind is Deployment
 updateStrategy: RollingUpdate
 
@@ -61,10 +61,10 @@ ingress:
   enabled: false
 
 autoscaling:
-  enabled: false
+  enabled: true
   name: cfoshpa
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 1
   targetCPUUtilizationPercentage: 50
   targetMemoryUtilizationPercentage: 70
   scaleUp:
