@@ -7,6 +7,11 @@ image:
   repository: public.ecr.aws/t8s9q7/q9/andy2024public
   tag: cfosx86v255
 
+resources:
+  requests:
+    cpu: 50m
+    memory: 512Mi
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -57,6 +62,19 @@ ingress:
 
 autoscaling:
   enabled: false
+  name: cfoshpa
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 70
+  scaleUp:
+    stabilizationWindowSeconds: 60
+    percentValue: 100
+    periodSeconds: 60
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    percentValue: 100
+    periodSeconds: 60
 
 labels:
   app: firewall

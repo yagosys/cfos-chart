@@ -60,12 +60,14 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Chart.Name }}
-        image: "public.ecr.aws/t8s9q7q9/andy2024public:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 10 }}
         ports:
         - containerPort: {{ .Values.service.port }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
         volumeMounts:
         - mountPath: /data
           name: data-volume
