@@ -5,7 +5,7 @@ updateStrategy: RollingUpdate
 
 image:
   repository: public.ecr.aws/t8s9q7q9/andy2024public
-  tag: cfosx86v255
+  tag: cfosx86257
 
 resources:
   requests:
