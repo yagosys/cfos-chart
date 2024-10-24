@@ -1,12 +1,13 @@
 ##################################
-below is a full example which use cfos chart to demo cFOS egress security with eks cluster 
+
+>below is a full example which use cfos chart to demo cFOS egress security with eks cluster
 
 ## Deploy cfos and agent 
 
 ## Bring up EKS cluster
 - 1 worker node with label app=true 
   *for run application*
-- worker with label security=true
+- 1 worker with label security=true
   *for run cFOS* 
 
 ```bash
@@ -134,24 +135,30 @@ NAME                             STATUS   ROLES    AGE     VERSION
 ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
 ```
 
-## install cfos and agent 
+## install cfos and vxlan agent 
 
-cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is DaemonSet with HPA configured up to max 4 PODS.if more cFOS required. you can override the default number 
+>cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is DaemonSet with HPA configured up to max 4 PODS.if more cFOS required. you can override the default number 
 
 ```bash
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
 helm repo update
 helm search repo cfos-chart
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set appArmor.enabled=true
+```
+
+- install with default value 
+```
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos 
 ```
 if you want overide the default parameter, such as image version etc, use 
+- install with custom value 
+
 ```bash
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos  --version 0.1.18-beta.3 --devel --set routeManager.image.tag=cni0.1.18p1 --set  image.tag=cfosx86257 
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos  --version 0.1.18-beta.3 --devel --set routeManager.image.tag=cni0.1.18p1 --set  image.tag=cfosx86257 --set appArmor.enable=true
 ```
 
 ### verify the deployment
 ```
-- helm list
+helm list
 ```
 result
 ```
@@ -171,7 +178,7 @@ route-manager-6v9g9                1/1     Running   0          54s
 route-manager-zfmsh                1/1     Running   0          54s
 
 ```
-- deployed hpa 
+- check deployed hpa 
 
 ```bash
 kubectl get hpa
@@ -455,7 +462,7 @@ pods=$(kubectl get pods -l protectedby=cfos -o jsonpath='{.items[*].metadata.nam
 
 for pod in $pods; do
     echo "Running ping in pod: $pod"
-    if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 1.1.1.1 > /dev/null 2>&1'; then
+    if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 1.1.1.1 | grep ttl'; then
         echo "Ping succeeded in pod: $pod"
     else
         echo "Ping failed in pod: $pod"
@@ -477,8 +484,14 @@ kubectl scale deployment diag --replicas=20
 ```
 ### verify scale 
 ```bash
+kubectl rollout status deployment diag
+
+```
+then
+```
 kubectl get deployment diag
 ```
+result
 
 ```
 NAME   READY   UP-TO-DATE   AVAILABLE   AGE
@@ -504,24 +517,12 @@ result
 ```
 check scale result
 ```bash
-kubectl get node
+kubectl get node -l app=true
 ```
 result 
 ```
-NAME                             STATUS   ROLES    AGE   VERSION
-ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-117-209.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-69-56.ec2.internal     Ready    <none>   31s   v1.30.4-eks-a737599
-```
-```bash
-kubectl get node -l app=true
-```
-result
-```
-NAME                             STATUS   ROLES    AGE   VERSION
-ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-69-56.ec2.internal     Ready    <none>   40s   v1.30.4-eks-a737599
-
+ip-10-244-120-63.ec2.internal   Ready    <none>   19m   v1.30.4-eks-a737599
+ip-10-244-75-185.ec2.internal   Ready    <none>   20s   v1.30.4-eks-a737599
 
 ```
 
@@ -546,8 +547,9 @@ ip-10-244-77-137.ec2.internal    Ready    <none>   20m   v1.30.4-eks-a737599
 
 ## scale cfos deployment 
 - manual scale 
+
 ```bash
-k scale deployment  cfos7210250-deployment-new --replicas=2
+kubectl scale deployment  cfos7210250-deployment-new --replicas=2
 ```
 
 - auto-scale with hpa
@@ -556,7 +558,7 @@ We can create some pressure to cFOS cpu to trigger auto-scaling
 
 ```bash
 pod=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}') 
-kubectl exec -it "$pod" -n "$NAMESPACE" -- sh -c 'while true; do /bin/busybox find / ; sleep 4; echo working...; done'
+kubectl exec -it "$pod" -n "$NAMESPACE" -- sh -c 'while true; do /bin/busybox find / ; echo working...; done'
 ```
 then check hpa. 
 ```bash
@@ -590,10 +592,10 @@ cfos7210250-deployment-new-77899b6769-pb8ks   1/1     Running   1 (79m ago)   87
 ```bash
 kubectl scale deployment diag --replicas=60
 ```
-
+check result
 
 ```bash
-kubectl get deployment diag
+kubectl rollout status deployment diag;kubectl get deployment diag
 ```
 result
 ```
