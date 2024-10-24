@@ -64,7 +64,7 @@ autoscaling:
   enabled: true
   name: cfoshpa
   minReplicas: 1
-  maxReplicas: 1
+  maxReplicas: 4
   targetCPUUtilizationPercentage: 50
   targetMemoryUtilizationPercentage: 70
   scaleUp:
