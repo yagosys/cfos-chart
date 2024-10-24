@@ -3,6 +3,16 @@ entries:
   cfos:
   - apiVersion: v2
     appVersion: 7.2.1.255
+    created: "2024-10-24T23:59:37.540689045Z"
+    description: cfos for kubernetes with vxlan agent
+    digest: 2ff28ce35895d63f416a59f03c13ba013cf97196ff828c351b99873510170a2c
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.19/cfos-0.1.19.tgz
+    version: 0.1.19
+  - apiVersion: v2
+    appVersion: 7.2.1.255
     created: "2024-10-23T12:25:09.187201908Z"
     description: cfos for kubernetes with vxlan agent
     digest: 8b552fda4aee704a1dd934add44be25b1f4290c9ca670e63e914ad844eaf5f14
@@ -23,16 +33,6 @@ entries:
     version: 0.1.18-beta.3
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T05:00:39.730002532Z"
-    description: cfos for kubernetes with vxlan agent
-    digest: b845165d4f76e15941ea6291d7062cb0a3c575732b05aa1bff76bbe84f06619a
-    name: cfos
-    type: application
-    urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.3/cfos-0.1.18-beta.3.tgz
-    version: 0.1.18-beta.3
-  - apiVersion: v2
-    appVersion: 7.2.1.255
     created: "2024-10-24T06:17:50.911309091Z"
     description: cfos for kubernetes with vxlan agent
     digest: b845165d4f76e15941ea6291d7062cb0a3c575732b05aa1bff76bbe84f06619a
@@ -43,24 +43,24 @@ entries:
     version: 0.1.18-beta.3
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T05:00:39.647162141Z"
+    created: "2024-10-24T23:59:37.282590769Z"
     description: cfos for kubernetes with vxlan agent
-    digest: 85006699c557b01e2bc718fe14ef9b5b6c4efbd02d9d9255f02fde4098b31b74
+    digest: b845165d4f76e15941ea6291d7062cb0a3c575732b05aa1bff76bbe84f06619a
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.2/cfos-0.1.18-beta.2.tgz
-    version: 0.1.18-beta.2
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.3/cfos-0.1.18-beta.3.tgz
+    version: 0.1.18-beta.3
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T01:38:38.306989618Z"
+    created: "2024-10-24T05:00:39.730002532Z"
     description: cfos for kubernetes with vxlan agent
-    digest: 85006699c557b01e2bc718fe14ef9b5b6c4efbd02d9d9255f02fde4098b31b74
+    digest: b845165d4f76e15941ea6291d7062cb0a3c575732b05aa1bff76bbe84f06619a
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.2/cfos-0.1.18-beta.2.tgz
-    version: 0.1.18-beta.2
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.3/cfos-0.1.18-beta.3.tgz
+    version: 0.1.18-beta.3
   - apiVersion: v2
     appVersion: 7.2.1.255
     created: "2024-10-24T00:19:32.569964754Z"
@@ -83,24 +83,34 @@ entries:
     version: 0.1.18-beta.2
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T01:38:38.230027723Z"
+    created: "2024-10-24T23:59:37.172269684Z"
     description: cfos for kubernetes with vxlan agent
-    digest: 4461c024a472e758b16ca7dbbeaa49f8faf6866c754027c4eac5cc385dff7566
+    digest: 85006699c557b01e2bc718fe14ef9b5b6c4efbd02d9d9255f02fde4098b31b74
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.1/cfos-0.1.18-beta.1.tgz
-    version: 0.1.18-beta.1
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.2/cfos-0.1.18-beta.2.tgz
+    version: 0.1.18-beta.2
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T00:19:32.485369124Z"
+    created: "2024-10-24T01:38:38.306989618Z"
     description: cfos for kubernetes with vxlan agent
-    digest: 4461c024a472e758b16ca7dbbeaa49f8faf6866c754027c4eac5cc385dff7566
+    digest: 85006699c557b01e2bc718fe14ef9b5b6c4efbd02d9d9255f02fde4098b31b74
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.1/cfos-0.1.18-beta.1.tgz
-    version: 0.1.18-beta.1
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.2/cfos-0.1.18-beta.2.tgz
+    version: 0.1.18-beta.2
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-24T05:00:39.647162141Z"
+    description: cfos for kubernetes with vxlan agent
+    digest: 85006699c557b01e2bc718fe14ef9b5b6c4efbd02d9d9255f02fde4098b31b74
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.2/cfos-0.1.18-beta.2.tgz
+    version: 0.1.18-beta.2
   - apiVersion: v2
     appVersion: 7.2.1.255
     created: "2024-10-24T05:00:39.549764978Z"
@@ -133,6 +143,36 @@ entries:
     version: 0.1.18-beta.1
   - apiVersion: v2
     appVersion: 7.2.1.255
+    created: "2024-10-24T23:59:37.051368227Z"
+    description: cfos for kubernetes with vxlan agent
+    digest: 4461c024a472e758b16ca7dbbeaa49f8faf6866c754027c4eac5cc385dff7566
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.1/cfos-0.1.18-beta.1.tgz
+    version: 0.1.18-beta.1
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-24T01:38:38.230027723Z"
+    description: cfos for kubernetes with vxlan agent
+    digest: 4461c024a472e758b16ca7dbbeaa49f8faf6866c754027c4eac5cc385dff7566
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.1/cfos-0.1.18-beta.1.tgz
+    version: 0.1.18-beta.1
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-24T00:19:32.485369124Z"
+    description: cfos for kubernetes with vxlan agent
+    digest: 4461c024a472e758b16ca7dbbeaa49f8faf6866c754027c4eac5cc385dff7566
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.18-beta.1/cfos-0.1.18-beta.1.tgz
+    version: 0.1.18-beta.1
+  - apiVersion: v2
+    appVersion: 7.2.1.255
     created: "2024-10-23T10:52:08.358728637Z"
     description: cfos for kubernetes
     digest: dc628397cb0f4ebbf4555e671e87a411bcea5a4bd5b3efe883905f685dec96d7
@@ -143,17 +183,7 @@ entries:
     version: 0.1.17
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-23T11:08:08.382294884Z"
-    description: cfos for kubernetes
-    digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
-    name: cfos
-    type: application
-    urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.5/cfos-0.1.17-beta.5.tgz
-    version: 0.1.17-beta.5
-  - apiVersion: v2
-    appVersion: 7.2.1.255
-    created: "2024-10-23T12:25:08.943426488Z"
+    created: "2024-10-23T23:09:38.981671018Z"
     description: cfos for kubernetes
     digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
@@ -173,7 +203,7 @@ entries:
     version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-23T23:09:38.981671018Z"
+    created: "2024-10-23T12:25:08.943426488Z"
     description: cfos for kubernetes
     digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
@@ -183,17 +213,7 @@ entries:
     version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T00:19:32.312088418Z"
-    description: cfos for kubernetes
-    digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
-    name: cfos
-    type: application
-    urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.5/cfos-0.1.17-beta.5.tgz
-    version: 0.1.17-beta.5
-  - apiVersion: v2
-    appVersion: 7.2.1.255
-    created: "2024-10-24T06:17:50.502934657Z"
+    created: "2024-10-23T11:08:08.382294884Z"
     description: cfos for kubernetes
     digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
@@ -213,44 +233,34 @@ entries:
     version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T05:00:39.248632682Z"
+    created: "2024-10-24T23:59:36.830701963Z"
     description: cfos for kubernetes
-    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
-    version: 0.1.17-beta.4
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.5/cfos-0.1.17-beta.5.tgz
+    version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-24T00:19:32.221665985Z"
+    created: "2024-10-24T06:17:50.502934657Z"
     description: cfos for kubernetes
-    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
-    version: 0.1.17-beta.4
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.5/cfos-0.1.17-beta.5.tgz
+    version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
-    created: "2024-10-23T10:52:08.250324937Z"
+    created: "2024-10-24T00:19:32.312088418Z"
     description: cfos for kubernetes
-    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    digest: 33919600d7263817bd316ed8dba7968c137b40482580fa0a0c2a1bc12b1a4f1d
     name: cfos
     type: application
     urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
-    version: 0.1.17-beta.4
-  - apiVersion: v2
-    appVersion: 7.2.1.255
-    created: "2024-10-23T11:08:08.273128199Z"
-    description: cfos for kubernetes
-    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
-    name: cfos
-    type: application
-    urls:
-    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
-    version: 0.1.17-beta.4
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.5/cfos-0.1.17-beta.5.tgz
+    version: 0.1.17-beta.5
   - apiVersion: v2
     appVersion: 7.2.1.255
     created: "2024-10-24T06:17:50.4190729Z"
@@ -293,6 +303,56 @@ entries:
     version: 0.1.17-beta.4
   - apiVersion: v2
     appVersion: 7.2.1.255
+    created: "2024-10-24T05:00:39.248632682Z"
+    description: cfos for kubernetes
+    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
+    version: 0.1.17-beta.4
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-24T23:59:36.738125474Z"
+    description: cfos for kubernetes
+    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
+    version: 0.1.17-beta.4
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-23T11:08:08.273128199Z"
+    description: cfos for kubernetes
+    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
+    version: 0.1.17-beta.4
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-23T10:52:08.250324937Z"
+    description: cfos for kubernetes
+    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
+    version: 0.1.17-beta.4
+  - apiVersion: v2
+    appVersion: 7.2.1.255
+    created: "2024-10-24T00:19:32.221665985Z"
+    description: cfos for kubernetes
+    digest: fc1214b2466de5368ca1530e48ed2db001b276f5874a6f47b37c15bf68e7c385
+    name: cfos
+    type: application
+    urls:
+    - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.17-beta.4/cfos-0.1.17-beta.4.tgz
+    version: 0.1.17-beta.4
+  - apiVersion: v2
+    appVersion: 7.2.1.255
     created: "2024-10-23T10:52:08.581760502Z"
     description: cfos for kubernetes
     digest: 603cc6d8934256c3a4929abe66d473731dff5c5f2b991f215e50354e00bbe03c
@@ -311,4 +371,4 @@ entries:
     urls:
     - https://github.com/yagosys/cfos-chart/releases/download/cfos-0.1.3/cfos-0.1.3.tgz
     version: 0.1.3
-generated: "2024-10-24T06:17:51.251162402Z"
+generated: "2024-10-24T23:59:37.774293925Z"
