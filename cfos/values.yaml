@@ -5,7 +5,7 @@ updateStrategy: RollingUpdate
 
 image:
   repository: public.ecr.aws/t8s9q7q9/andy2024public
-  tag: cfosx86257
+  tag: cfosx86v255
 
 resources:
   requests:
@@ -83,8 +83,8 @@ routeManager:
   enabled: true
   image:
     repository: public.ecr.aws/t8s9q7q9/andy2024public
-    tag: cni0.1.17p4
-    pullPolicy: Always
+    tag: cni0.1.19
+    pullPolicy: IfNotPresent
   serviceAccount:
     create: true
     name: cni-service-account
