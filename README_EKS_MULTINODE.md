@@ -643,7 +643,10 @@ while true; do
             printf "\e[1;32m   Running tests on pod: $pod \e[0m\n"
 
             printf "\e[1;32m   Test IPS feature for egress traffic \e[0m\n"
-            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 5 -H \"User-Agent: () { :; }; /bin/ls\" https://ipinfo.io" || true
+            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 2 -H \"User-Agent: () { :; }; /bin/ls\" https://10.96.0.1" || true
+            sleep 1
+
+            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 2 -H \"User-Agent: () { :; }; /bin/ls\" https://kubernetes.default.svc.cluster.local" || true
             sleep 1
 
             printf "\e[1;32m   Test application control feature for egress traffic \e[0m\n"
