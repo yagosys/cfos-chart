@@ -14,6 +14,7 @@
 #!/bin/bash -xe
 
 AWS_REGION="us-east-1"
+export AWS_PAGER=""
 EKSVERSION="1.30"
 CLUSTERNAME="democluster"
 PODCIDR="10.244.0.0/16"
