@@ -136,9 +136,9 @@ NAME                             STATUS   ROLES    AGE     VERSION
 ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
 ```
 
-## install cfos and vxlan agent 
+## Deploy cfos and vxlan agent 
 
->cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is DaemonSet with HPA configured up to max 4 PODS.if more cFOS required. you can override the default number 
+>cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is a **kind:Deployment** with HPA configured up to max 4 PODs.if more cFOS required. you can override the default number 
 
 ```bash
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
