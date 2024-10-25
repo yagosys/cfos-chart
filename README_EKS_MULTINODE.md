@@ -152,8 +152,10 @@ helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos
 if you want overide the default parameter, such as image version etc, use 
 - install with custom value 
 
+> for example, install arm cfos image as DaemonSet with appArmor profile set to unconstrained 
+
 ```bash
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos  --version 0.1.18-beta.3 --devel --set routeManager.image.tag=cni0.1.18p1 --set  image.tag=cfosx86257 --set appArmor.enable=true
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet
 ```
 
 ### verify the deployment
@@ -681,10 +683,14 @@ result
 NAME                               READY   STATUS    RESTARTS      AGE
 cfos7210250-deployment-new-5x9tc   1/1     Running   1 (39m ago)   41m
 ```
+### check log detail 
+
 ```bash
 podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -it po/$podname -c cfos -- sh
-
+```
+then 
+```
 # cd /var/log/log/
 # ls app.0
 app.0
