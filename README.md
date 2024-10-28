@@ -1,15 +1,20 @@
 ##################################
-below is a full example which use cfos chart to demo cFOS egress security with eks cluster 
+
+>below is a full example which use cfos chart to demo cFOS egress security with eks cluster
 
 ## Deploy cfos and agent 
+
 ## Bring up EKS cluster
-- worker with label app=true
-- worker with label security=true
+- 1 worker node with label app=true 
+  *for run application*
+- 1 worker with label security=true
+  *for run cFOS* 
 
 ```bash
 #!/bin/bash -xe
 
 AWS_REGION="us-east-1"
+export AWS_PAGER=""
 EKSVERSION="1.30"
 CLUSTERNAME="democluster"
 PODCIDR="10.244.0.0/16"
@@ -131,12 +136,27 @@ NAME                             STATUS   ROLES    AGE     VERSION
 ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
 ```
 
-## install cfos DaemonSet and agent 
+## Deploy cfos and vxlan agent 
+
+>cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is a **kind:Deployment** with HPA configured up to max 4 PODs.if more cFOS required. you can override the default number 
+
 ```bash
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
 helm repo update
 helm search repo cfos-chart
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set appArmor.enabled=true
+```
+
+- install with default value 
+```
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos 
+```
+if you want overide the default parameter, such as image version etc, use 
+- install with custom value 
+
+> for example, install arm cfos image as DaemonSet with appArmor profile set to unconstrained 
+
+```bash
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet
 ```
 
 ### verify the deployment
@@ -145,10 +165,11 @@ helm list
 ```
 result
 ```
-NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART     	APP VERSION
-cfos7210250-deployment-new	default  	1       	2024-10-14 15:54:40.697525 -0500 CDT	deployed	cfos-0.1.3	7.2.1.257
+NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART             	APP VERSION
+cfos7210250-deployment-new	default  	1       	2024-10-24 08:55:56.277468 +0530 IST	deployed	cfos-0.1.18-beta.3	7.2.1.255
 ```
 
+- deployed cfos and agent
 ```bash
 kubectl get pod
 ```
@@ -160,6 +181,17 @@ route-manager-6v9g9                1/1     Running   0          54s
 route-manager-zfmsh                1/1     Running   0          54s
 
 ```
+- check deployed hpa 
+
+```bash
+kubectl get hpa
+```
+result
+```
+NAME      REFERENCE                               TARGETS                       MINPODS   MAXPODS   REPLICAS   AGE
+cfoshpa   Deployment/cfos7210250-deployment-new   cpu: 6%/50%, memory: 7%/70%   1         4         1          2m9s
+```
+
 ## apply cfos license via configmap file
 ```bash
 kubectl apply -f cfos_license.yaml
@@ -172,26 +204,22 @@ kubectl logs -f po/$podname -c cfos
 ```
 result
 ```
-
 System is starting...
 
-Firmware version is 7.2.1.0255
+Firmware version is 7.2.1.0257
 Preparing environment...
+failed to get sn for debug zone
+failed to get hostname for debug zone
 Verifying license...
+Setting up CMDB...
 WARNING: System is running in restricted mode due to lack of valid license!
 Starting services...
 System is ready.
 
-2024-10-14_22:47:50.11804 ok: run: /etc/services/certd: (pid 131) 2s, normally down
-2024-10-14_22:48:07.55389 INFO: 2024/10/14 22:48:07 received a new fos configmap
-2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 configmap name: fos-license, labels: map[app:fos category:license]
-2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 got a fos license
-2024-10-14_22:48:07.55390 INFO: 2024/10/14 22:48:07 importing license...
-2024-10-14_22:48:07.56238 INFO: 2024/10/14 22:48:07 license is imported successfuly!
-2024-10-14_22:48:21.23682 ok: run: /etc/services/certd: (pid 131) 33s, normally down
-2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 received a new fos configmap
-2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 configmap name: fos-license, labels: map[app:fos category:license]
-2024-10-14_22:48:26.28280 INFO: 2024/10/14 22:48:26 got a fos license
+INFO: 2024/10/24 03:29:11 received configmap name: fos-license, labels: map[app:fos category:license], version: 3515
+INFO: 2024/10/24 03:29:15 run event 'license' handler
+INFO: 2024/10/24 03:29:15 importing license...
+INFO: 2024/10/24 03:29:15 license is imported successfuly!
 
 ```
 ### Verify cFOS has vxlan interface ready 
@@ -218,13 +246,24 @@ then
 ```
 User: admin
 Password:
+cFOS # diagnose sys license
+
+Status: Valid license
+SN: CFOSVLTM24000XXX
+Valid From: 2024-10-24
+Valid To: 2024-12-25
+
+
 cFOS # diagnose sys status
-Version: cFOS v7.2.1 build0255
-Serial-Number: CFOSVLTMXXXXX
-System time: Tue Oct 15 2024 03:08:58 GMT+0000 (UTC)
+Version: cFOS v7.2.1 build0257
+Serial-Number: CFOSVLTMXXXX
+System time: Thu Oct 24 2024 03:31:40 GMT+0000 (UTC)
+
 ```
 
 ## create firewall policy via configmap file
+
+the configmap include a syslog server which is fortianalyzer VM 
 
 ```bash
 filename="net1tointernetfirewallpolicy.yaml"
@@ -239,6 +278,11 @@ metadata:
 data:
   type: partial
   config: |-
+    config log syslogd setting
+      set status enable
+      set server "fazcfos2024.eastus.cloudapp.azure.com"
+      set interface "eth0"
+    end
     config webfilter content
        edit 1
          set name "webfilter"
@@ -421,7 +465,7 @@ pods=$(kubectl get pods -l protectedby=cfos -o jsonpath='{.items[*].metadata.nam
 
 for pod in $pods; do
     echo "Running ping in pod: $pod"
-    if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 1.1.1.1 > /dev/null 2>&1'; then
+    if kubectl exec $pod -- /bin/sh -c 'ping -c 1 -W 5 1.1.1.1 | grep ttl'; then
         echo "Ping succeeded in pod: $pod"
     else
         echo "Ping failed in pod: $pod"
@@ -443,8 +487,14 @@ kubectl scale deployment diag --replicas=20
 ```
 ### verify scale 
 ```bash
+kubectl rollout status deployment diag
+
+```
+then
+```
 kubectl get deployment diag
 ```
+result
 
 ```
 NAME   READY   UP-TO-DATE   AVAILABLE   AGE
@@ -470,34 +520,85 @@ result
 ```
 check scale result
 ```bash
-kubectl get node
+kubectl get node -l app=true
 ```
 result 
 ```
-NAME                             STATUS   ROLES    AGE   VERSION
-ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-117-209.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-69-56.ec2.internal     Ready    <none>   31s   v1.30.4-eks-a737599
+ip-10-244-120-63.ec2.internal   Ready    <none>   19m   v1.30.4-eks-a737599
+ip-10-244-75-185.ec2.internal   Ready    <none>   20s   v1.30.4-eks-a737599
+
 ```
+
+## scale security node
+scale security node for run more cFOS 
+
 ```bash
-kubectl get node -l app=true
+eksctl scale nodegroup democluster-eks-ng-security -N 2 --cluster $CLUSTERNAME 
+
+```
+check result
+
+```bash
+kubectl get node -l security=true
 ```
 result
-```
+```bash
 NAME                             STATUS   ROLES    AGE   VERSION
-ip-10-244-103-112.ec2.internal   Ready    <none>   17m   v1.30.4-eks-a737599
-ip-10-244-69-56.ec2.internal     Ready    <none>   40s   v1.30.4-eks-a737599
+ip-10-244-102-214.ec2.internal   Ready    <none>   17s   v1.30.4-eks-a737599
+ip-10-244-77-137.ec2.internal    Ready    <none>   20m   v1.30.4-eks-a737599
+```
 
+## scale cfos deployment 
+- manual scale 
 
+```bash
+kubectl scale deployment  cfos7210250-deployment-new --replicas=2
+```
+
+- auto-scale with hpa
+
+We can create some pressure to cFOS cpu to trigger auto-scaling
+
+```bash
+pod=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}') 
+kubectl exec -it "$pod" -n "$NAMESPACE" -- sh -c 'while true; do /bin/busybox find / ; echo working...; done'
+```
+then check hpa. 
+```bash
+kubectl get hpa
+```
+result
+```bash
+kubectl get hpa
+```
+result
+
+```
+NAME      REFERENCE                               TARGETS                         MINPODS   MAXPODS   REPLICAS   AGE
+cfoshpa   Deployment/cfos7210250-deployment-new   cpu: 56%/50%, memory: 55%/70%   1         4         4          86m
+```
+
+### check scaled cfos pod
+```bash
+kubectl get pod -l app=firewall
+```
+result
+```bash
+NAME                                          READY   STATUS    RESTARTS        AGE
+cfos7210250-deployment-new-77899b6769-2z267   1/1     Running   1 (14m ago)   14m
+cfos7210250-deployment-new-77899b6769-84vcl   1/1     Running   1 (14m ago)   14m
+cfos7210250-deployment-new-77899b6769-bpw72   1/1     Running   1 (71m ago)   71m
+cfos7210250-deployment-new-77899b6769-pb8ks   1/1     Running   1 (79m ago)   87m
 ```
 
 ## scale protected pod to more numbers 
 ```bash
 kubectl scale deployment diag --replicas=60
 ```
+check result
 
 ```bash
-kubectl get deployment diag
+kubectl rollout status deployment diag;kubectl get deployment diag
 ```
 result
 ```
@@ -542,7 +643,10 @@ while true; do
             printf "\e[1;32m   Running tests on pod: $pod \e[0m\n"
 
             printf "\e[1;32m   Test IPS feature for egress traffic \e[0m\n"
-            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 5 -H \"User-Agent: () { :; }; /bin/ls\" https://ipinfo.io" || true
+            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 2 -H \"User-Agent: () { :; }; /bin/ls\" https://10.96.0.1" || true
+            sleep 1
+
+            kubectl exec -it "$pod" -- sh -c "curl -k --max-time 2 -H \"User-Agent: () { :; }; /bin/ls\" https://kubernetes.default.svc.cluster.local" || true
             sleep 1
 
             printf "\e[1;32m   Test application control feature for egress traffic \e[0m\n"
@@ -583,10 +687,14 @@ result
 NAME                               READY   STATUS    RESTARTS      AGE
 cfos7210250-deployment-new-5x9tc   1/1     Running   1 (39m ago)   41m
 ```
+### check log detail 
+
 ```bash
 podname=$(kubectl get pod -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -it po/$podname -c cfos -- sh
-
+```
+then 
+```
 # cd /var/log/log/
 # ls app.0
 app.0
@@ -609,19 +717,48 @@ date=2024-10-14 time=21:30:29 eventtime=1728941429 tz="+0000" logid="0314012288"
 date=2024-10-14 time=21:30:34 eventtime=1728941434 tz="+0000" logid="0316013056" type="utm" subtype="webfilter" eventtype="ftgd_blk" level="warning" policyid=100 sessionid=547 srcip=192.168.200.107 srcport=51976 srcintf="vxlan0" dstip=89.238.73.97 dstport=443 dstintf="eth0" proto=6 service="HTTPS" hostname="secure.eicar.org" profile="webfilter" action="blocked" reqtype="direct" url="https://secure.eicar.org/eicar_com.zip" sentbyte=144 rcvdbyte=0 direction="outgoing" msg="URL belongs to a denied category in policy" method="domain" cat=26 catdesc="Malicious Websites"
 date=2024-10-14 time=21:30:50 eventtime=1728941450 tz="+0000" logid="0316013056" type="utm" subtype="webfilter" eventtype="ftgd_blk" level="warning" policyid=100 sessionid=568 srcip=192.168.200.68 srcport=37836 srcintf="vxlan0" dstip=154.52.3.165 dstport=443 dstintf="eth0" proto=6 service="HTTPS" hostname="www.fortiguard.com" profile="webfilter" action="blocked" reqtype="direct" url="https://www.fortiguard.com/wftest/26.html" sentbyte=119 rcvdbyte=0 direction="outgoing" msg="URL belongs to a denied category in policy" method="domain" cat=26 catdesc="Malicious Websites"
 date=2024-10-14 time=21:30:55 eventtime=1728941455 tz="+0000" logid="0314012288" type="utm" subtype="webfilter" eventtype="content" # more ips.0
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.219 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=87 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=33466 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129061 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.197 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=114 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=57630 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129090 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.157 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=115 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=49388 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129096 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.27 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=124 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=57940 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129105 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.91 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=132 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=38028 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129126 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.44 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=138 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=41406 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129129 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
-date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.64 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=133 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=58336 dstport=443 hostname="ipinfo.io" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129130 msg="applications3: Bash.Fun#
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.219 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=87 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=33466 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129061 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.197 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=114 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=57630 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129090 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.157 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=115 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=49388 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129096 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.27 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=124 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=57940 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129105 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.91 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=132 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=38028 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129126 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.44 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=138 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=41406 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129129 msg="applications3: Bash.Function.Definitions.Remote.Code.Execution"
+date=2024-10-14 time=21:27:32 eventtime=1728941252 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=192.168.200.64 dstip=34.117.59.81 srcintf="vxlan0" dstintf="eth0" sessionid=133 action="dropped" proto=6 service="HTTPS" policyid=100 attack="Bash.Function.Definitions.Remote.Code.Execution" srcport=58336 dstport=443 hostname="www.hackthebox.com" url="/" direction="outgoing" attackid=39294 profile="high_security" incidentserialno=89129130 msg="applications3: Bash.Fun#
 ```
 ## uninstall cFOS
 
 ```bash
 helm list 
 helm uninstall cfos7210250-deployment-new 
+```
+
+### check protected pod now working without vxlan
+
+```bash
+pod=$(kubectl get pod -l protectedby=cfos -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it po/$pod -- ip a 
+kubectl exec -it po/$pod -- ip route
+```
+result
+```
+default via 169.254.1.1 dev eth0
+10.244.0.0/16 via 169.254.1.1 dev eth0 metric 10
+169.254.1.1 dev eth0 scope link
+```
+and
+```
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+3: eth0@if23: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 9001 qdisc noqueue state UP group default
+    link/ether d2:91:9c:a2:86:ad brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 10.244.68.30/32 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::d091:9cff:fea2:86ad/64 scope link
+       valid_lft forever preferred_lft forever
 ```
 
 ## remove protected pod
