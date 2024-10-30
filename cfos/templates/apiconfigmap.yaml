@@ -1,0 +1,20 @@
+{{- if .Values.enablecFOSAPI8080 }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfosapiuserandport8080
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+    app: fos
+    category: config
+data:
+  type: partial
+  config: |-
+    config system global
+      set admin-port 8080
+    end
+    config system api-user
+      edit "agent"
+     next
+    end
+{{- end }}
