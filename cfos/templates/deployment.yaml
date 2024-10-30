@@ -71,18 +71,17 @@ spec:
         volumeMounts:
         - mountPath: /data
           name: data-volume
-            {{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default "cfosconfigdata" }}
-            {{- else }}
-          emptyDir: {}
-            {{- end }}
         - mountPath: /etc/resolv.conf
           name: resolv-conf
           subPath: resolv.conf
       volumes:
       - name: data-volume
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim | default "cfosconfigdata" }}
+        {{- else }}
         emptyDir: {}
+        {{- end }}
       - name: resolv-conf
         emptyDir: {}
       dnsPolicy: ClusterFirst
