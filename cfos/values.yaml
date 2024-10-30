@@ -88,6 +88,13 @@ autoscaling:
 labels:
   app: firewall
 
+api:
+  port: 8080
+  nodePort:
+    enabled: true
+    serviceName: "cfos-api-service"
+    port: 31943
+
 routeManager:
   enabled: true
   image:

@@ -1,0 +1,17 @@
+{{- if .Values.api.nodePort.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.api.nodePort.serviceName | default "cfos-api-service" }}
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "cfos.selectorLabels" . | nindent 4 }}
+  ports:
+    - nodePort: {{ .Values.api.nodePort.port | default 31943 }}
+      port: {{ .Values.api.port | default 8080 }}
+      targetPort: {{ .Values.api.port | default 8080 }}
+      protocol: TCP
+{{- end }}
