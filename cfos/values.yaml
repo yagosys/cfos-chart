@@ -3,6 +3,14 @@ deployment:
 replicaCount: 1    # Only used if kind is Deployment
 updateStrategy: RollingUpdate
 
+persistence:
+  enabled: false
+  # existingClaim: cfosconfigdata  # Uncomment to use existing PVC
+  # If not using existing claim, below values are used to create a new PVC
+  storageClass: "local-path"
+  accessMode: ReadWriteOnce
+  size: 1Gi
+
 image:
   repository: public.ecr.aws/t8s9q7q9/andy2024public
   tag: cfosx86v255
@@ -83,7 +91,7 @@ routeManager:
   enabled: true
   image:
     repository: public.ecr.aws/t8s9q7q9/andy2024public
-    tag: cni0.1.19
+    tag: cni0.1.20
     pullPolicy: IfNotPresent
   serviceAccount:
     create: true
@@ -99,3 +107,4 @@ routeManager:
     VXLAN_ID: "42"
     ROUTE_DST: "0.0.0.0/1,128.0.0.0/1"
     LOG_LEVEL: "extendedDebug"
+

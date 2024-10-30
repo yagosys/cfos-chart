@@ -71,6 +71,12 @@ spec:
         volumeMounts:
         - mountPath: /data
           name: data-volume
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim | default "cfosconfigdata" }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
         - mountPath: /etc/resolv.conf
           name: resolv-conf
           subPath: resolv.conf
