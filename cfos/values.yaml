@@ -11,7 +11,7 @@ persistence:
   accessMode: ReadWriteOnce
   size: 1Gi
 
-enablecFOSAPI8080: true
+enablecFOSAPI8080: false
 image:
   repository: public.ecr.aws/t8s9q7q9/andy2024public
   tag: cfosx86v255

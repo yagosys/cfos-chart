@@ -23,6 +23,9 @@ rules:
 - apiGroups: [""]
   resources: ["services"]
   verbs: ["get"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create","get","list","watch","update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
