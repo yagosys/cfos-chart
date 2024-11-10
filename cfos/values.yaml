@@ -55,6 +55,7 @@ securityContext:
       - NET_ADMIN
       - SYS_ADMIN
       - NET_RAW
+      - BPF 
 
 appArmor:
   enabled: false
@@ -115,4 +116,10 @@ routeManager:
     VXLAN_ID: "42"
     ROUTE_DST: "0.0.0.0/1,128.0.0.0/1"
     LOG_LEVEL: "extendedDebug"
+    BPF_FS_PATH: "/sys/fs/bpf"  # Added BPF filesystem path
+    EBPF_PROGRAM_PATH: "./myapp.bpf.o"
+    EBPF_MAP_PATH: "/sys/fs/bpf/myapp"
+
+bpf:
+  enabled: true  # Enable BPF filesystem mounting
 

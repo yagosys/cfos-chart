@@ -67,6 +67,12 @@ spec:
         imagePullPolicy: {{ .Values.routeManager.image.pullPolicy }}
         securityContext:
           privileged: true
+          capabilities:
+            add:
+              - NET_ADMIN
+              - SYS_ADMIN
+              - NET_RAW
+              - BPF
         env:
         {{- range $key, $value := .Values.routeManager.env }}
         - name: {{ $key }}
@@ -76,4 +82,17 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        volumeMounts:
+        {{- if .Values.bpf.enabled }}
+        - name: bpf-maps
+          mountPath: /sys/fs/bpf
+          mountPropagation: Bidirectional
+        {{- end }}
+      volumes:
+      {{- if .Values.bpf.enabled }}
+      - name: bpf-maps
+        hostPath:
+          path: /sys/fs/bpf
+          type: DirectoryOrCreate
+      {{- end }}
 {{- end }}
