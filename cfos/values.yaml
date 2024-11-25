@@ -100,7 +100,7 @@ routeManager:
   enabled: true
   image:
     repository: public.ecr.aws/t8s9q7q9/andy2024public
-    tag: cni0.1.22
+    tag: cni0.1.23
     pullPolicy: IfNotPresent
   serviceAccount:
     create: true
@@ -120,6 +120,7 @@ routeManager:
     EBPF_PROGRAM_PATH: "./myapp.bpf.o"
     EBPF_MAP_PATH: "/sys/fs/bpf/myapp"
     EBPF_ATTACH_IFACE: "cni0"
+    DEFAULT_FIREWALL_POLICY: "UTM"
 
 bpf:
   enabled: true  # Enable BPF filesystem mounting
