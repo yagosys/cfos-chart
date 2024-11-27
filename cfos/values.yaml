@@ -18,7 +18,7 @@ image:
 
 resources:
   requests:
-    cpu: 1000m
+    cpu: 500m
     memory: 512Mi
 
 nameOverride: ""
@@ -71,7 +71,7 @@ ingress:
   enabled: false
 
 autoscaling:
-  enabled: true
+  enabled: false
   name: cfoshpa
   minReplicas: 1
   maxReplicas: 4
