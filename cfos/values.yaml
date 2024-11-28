@@ -127,7 +127,6 @@ bpf:
 
 kedaScaling:
   enabled: false
-  installKeda: false  # Set to true to install KEDA as a dependency
   pollingInterval: 30
   cooldownPeriod: 300
   minReplicas: 1
