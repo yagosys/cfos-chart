@@ -148,3 +148,22 @@ metrics:
     type: ClusterIP
     port: 8080
 
+cFOSmetricExample:
+  enabled: false
+  metrics:
+    - type: "resource"
+      name: "cpu_usage"
+      collection: "prometheus"
+      labels:
+        resource_type: "cpu"
+    - type: "resource"
+      name: "memory_usage"
+      collection: "prometheus"
+      labels:
+        resource_type: "memory"
+    - type: "cli"
+      name: "session_count"
+      query: "conntrack -C"
+      collection: "prometheus"
+      labels:
+        metric_type: "system"
