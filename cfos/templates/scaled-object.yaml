@@ -1,0 +1,43 @@
+{{- include "cfos.validateKeda" . -}}
+{{- if and .Values.kedaScaling.enabled (ne .Values.deployment.kind "DaemonSet") }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "cfos.fullname" . }}-scaler
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: {{ .Values.deployment.kind | default "Deployment" }}
+    name: {{ include "cfos.fullname" . }}
+  pollingInterval: {{ .Values.kedaScaling.pollingInterval }}
+  cooldownPeriod: {{ .Values.kedaScaling.cooldownPeriod }}
+  minReplicaCount: {{ .Values.kedaScaling.minReplicas }}
+  maxReplicaCount: {{ .Values.kedaScaling.maxReplicas }}
+  triggers:
+  {{- if .Values.kedaScaling.triggers.cpu.enabled }}
+  - type: metrics-api
+    metadata:
+      url: "http://{{ include "cfos.fullname" . }}-metrics.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.metrics.service.port }}/metrics/cpu_usage"
+      valueLocation: "value"
+      targetValue: "{{ .Values.kedaScaling.triggers.cpu.targetValue }}"
+      method: "GET"
+  {{- end }}
+  {{- if .Values.kedaScaling.triggers.memory.enabled }}
+  - type: metrics-api
+    metadata:
+      url: "http://{{ include "cfos.fullname" . }}-metrics.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.metrics.service.port }}/metrics/memory_usage"
+      valueLocation: "value"
+      targetValue: "{{ .Values.kedaScaling.triggers.memory.targetValue }}"
+      method: "GET"
+  {{- end }}
+  {{- if .Values.kedaScaling.triggers.sessionCount.enabled }}
+  - type: metrics-api
+    metadata:
+      url: "http://{{ include "cfos.fullname" . }}-metrics.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.metrics.service.port }}/metrics/session_count"
+      valueLocation: "value"
+      targetValue: "{{ .Values.kedaScaling.triggers.sessionCount.targetValue }}"
+      method: "GET"
+  {{- end }}
+{{- end }}
