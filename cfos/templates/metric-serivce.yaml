@@ -1,0 +1,17 @@
+{{- if .Values.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cfos.fullname" . }}-metrics
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.metrics.service.type }}
+  ports:
+    - port: {{ .Values.metrics.service.port }}
+      targetPort: {{ .Values.metrics.service.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "cfos.selectorLabels" . | nindent 4 }}
+{{- end }}
