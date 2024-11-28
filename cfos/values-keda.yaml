@@ -1,0 +1,27 @@
+# Disable traditional HPA
+autoscaling:
+  enabled: false
+
+# Enable KEDA scaling
+kedaScaling:
+  enabled: true
+  installKeda: true
+  pollingInterval: 30
+  cooldownPeriod: 300
+  minReplicas: 1
+  maxReplicas: 5
+  triggers:
+    cpu:
+      enabled: true
+      targetValue: "80"
+    memory:
+      enabled: true
+      targetValue: "300000000"
+    sessionCount:
+      enabled: true
+      targetValue: "100"
+
+# Ensure metrics service is enabled
+metrics:
+  service:
+    enabled: true
