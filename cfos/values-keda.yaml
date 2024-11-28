@@ -5,7 +5,7 @@ autoscaling:
 # Enable KEDA scaling
 kedaScaling:
   enabled: true
-  installKeda: true
+  installKeda: false
   pollingInterval: 30
   cooldownPeriod: 300
   minReplicas: 1
