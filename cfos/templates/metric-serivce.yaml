@@ -13,5 +13,6 @@ spec:
       protocol: TCP
       name: metrics
   selector:
-    {{- include "cfos.selectorLabels" . | nindent 4 }}
+    app: route-manager
+    #metrics-enabled: "true"  # Optional: if you implement the dynamic labeling
 {{- end }}
