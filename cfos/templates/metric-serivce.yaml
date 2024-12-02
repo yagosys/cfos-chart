@@ -14,5 +14,5 @@ spec:
       name: metrics
   selector:
     app: route-manager
-    #metrics-enabled: "true"  # Optional: if you implement the dynamic labeling
+    metrics-enabled: "true"  # Optional: if you implement the dynamic labeling
 {{- end }}
