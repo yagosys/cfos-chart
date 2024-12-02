@@ -1,0 +1,19 @@
+{{/* Debug info */}}
+{{- /*
+Debug Values:
+kedaScaling.enabled: {{ .Values.kedaScaling.enabled }}
+cFOSmetricExample.enabled: {{ .Values.cFOSmetricExample.enabled }}
+*/ -}}
+{{- if and .Values.kedaScaling.enabled .Values.cFOSmetricExample.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cfos.fullname" . }}-metrics-config
+  labels:
+    {{- include "cfos.labels" . | nindent 4 }}
+  annotations:
+    cfos.fortinet.com/config-type: "metrics"
+data:
+  metrics: |
+    {{- .Values.cFOSmetricExample.metrics | toJson | nindent 4 }}
+{{- end }}

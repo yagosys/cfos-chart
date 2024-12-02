@@ -1,0 +1,22 @@
+cFOSmetricExample:
+  enabled: true
+  metrics:
+    - collection: prometheus
+      labels:
+        resource_type: cpu
+      name: cpu_usage
+      type: resource
+    - collection: prometheus
+      labels:
+        resource_type: memory
+      name: memory_usage
+      type: resource
+    - collection: prometheus
+      labels:
+        metric_type: system
+      name: session_count
+      query: conntrack -C
+      type: cli
+
+kedaScaling:
+  enabled: true
