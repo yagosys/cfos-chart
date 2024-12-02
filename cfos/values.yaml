@@ -134,10 +134,10 @@ kedaScaling:
   triggers:
     cpu:
       enabled: true
-      targetValue: "80"
+      targetValue: "50"
     memory:
       enabled: true
-      targetValue: "300000000"
+      targetValue: "400000000"
     sessionCount:
       enabled: true
       targetValue: "100"
