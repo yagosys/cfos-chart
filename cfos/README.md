@@ -30,3 +30,8 @@ helm install/upgrade ... --set deployment.kind=Deployment,autoscaling.enabled=tr
 ```bash
 helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set appArmor.enabled=true
 ```
+## Deploy with keda and sample metrics configmap
+
+```bash
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true
+```
