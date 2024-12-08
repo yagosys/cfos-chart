@@ -16,7 +16,7 @@ kedaScaling:
       targetValue: "80"
     memory:
       enabled: true
-      targetValue: "300000000"
+      targetValue: "400000000"
     sessionCount:
       enabled: true
       targetValue: "100"
