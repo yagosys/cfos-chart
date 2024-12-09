@@ -18,6 +18,8 @@ export AWS_PAGER=""
 EKSVERSION="1.30"
 CLUSTERNAME="democluster"
 PODCIDR="10.244.0.0/16"
+DNS_IP="10.96.0.10" 
+SERVICEIPV4CIDR="10.96.0.0/16"
 AVAILABILITY_ZONES=$(aws ec2 describe-availability-zones --region $AWS_REGION --query "AvailabilityZones[?State=='available'].ZoneName" --output text | tr '\t' ',' | cut -d',' -f1-2)
 filename="way3cluster.yaml"
 
@@ -95,7 +97,8 @@ managedNodeGroups:
 
 kubernetesNetworkConfig:
   ipFamily: IPv4
-  serviceIPv4CIDR: 10.96.0.0/16
+  serviceIPv4CIDR: ${SERVICEIPV4CIDR}
+  dnsServiceIP: ${DNS_IP}
 
 vpc:
   autoAllocateIPv6: false
@@ -114,11 +117,12 @@ EOF
 eksctl get cluster --name $CLUSTERNAME --region $AWS_REGION || eksctl create cluster -f $filename
 aws eks create-addon --addon-name eks-pod-identity-agent --cluster ${CLUSTERNAME} --addon-version v1.0.0-eksbuild.1 --region $AWS_REGION
 kubectl get pods -n kube-system | grep 'eks-pod-identity-agent' || true
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 aws eks list-access-entries --cluster-name ${CLUSTERNAME} --region $AWS_REGION
 
 ```
 ### Verify  the cluster 
+by default, it provisions 1 worker node with label app=true for deploy protected application. 1 worker node with label security=true for deploy cfos . the cfos by default deployed as Deployment 
+
 ```bash
 kubectl get node -l app=true
 ```
@@ -136,9 +140,33 @@ NAME                             STATUS   ROLES    AGE     VERSION
 ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
 ```
 
+## deploy resource api 
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+## deploy keda 
+```bash
+# Add KEDA Helm repository
+helm repo add kedacore https://kedacore.github.io/charts
+
+helm repo update
+
+# Install KEDA in keda namespace
+helm install keda kedacore/keda --namespace keda --create-namespace
+
+```
+
+## apply cfos license via configmap file
+```bash
+kubectl apply -f cfos_license.yaml
+```
+
 ## Deploy cfos and vxlan agent 
 
 >cFOS can be installed as DaemonSet or Deployment with helm chart, by default , it is a **kind:Deployment** with HPA configured up to max 4 PODs.if more cFOS required. you can override the default number 
+
 
 ```bash
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
@@ -146,17 +174,29 @@ helm repo update
 helm search repo cfos-chart
 ```
 
+result
+
+```bash
+NAME           	CHART VERSION	APP VERSION	DESCRIPTION
+cfos-chart/cfos	0.1.20       	7.2.1.255  	cfos for kubernetes with vxlan agent with keda ...
+```
 - install with default value 
 ```
 helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos 
+
 ```
+this is same as 
+```bash
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set routeManager.env.DEFAULT_FIREWALL_POLICY="UTM" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true
+```
+
 if you want overide the default parameter, such as image version etc, use 
 - install with custom value 
 
 > for example, install arm cfos image as DaemonSet with appArmor profile set to unconstrained 
 
 ```bash
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet --set routeManager.env.DEFAULT_FIREWALL_POLICY="Layer4" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true 
 ```
 
 ### verify the deployment
@@ -165,8 +205,8 @@ helm list
 ```
 result
 ```
-NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART             	APP VERSION
-cfos7210250-deployment-new	default  	1       	2024-10-24 08:55:56.277468 +0530 IST	deployed	cfos-0.1.18-beta.3	7.2.1.255
+NAME                      	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART      APP VERSION
+cfos7210250-deployment-new	default  	1       	2024-12-09 09:35:37.210781 +0800 CST	deployed	cfos-0.1.207.2.1.255
 ```
 
 - deployed cfos and agent
@@ -181,21 +221,204 @@ route-manager-6v9g9                1/1     Running   0          54s
 route-manager-zfmsh                1/1     Running   0          54s
 
 ```
-- check deployed hpa 
+- check deployed scale object  for keda
 
 ```bash
-kubectl get hpa
+kubectl get scaledobject
+```
+
+result
+```
+NAME                                SCALETARGETKIND      SCALETARGETNAME              MIN   MAX   READY   ACTIVE   FALLBACK   PAUSED    TRIGGERS   AUTHENTICATIONS   AGE
+cfos7210250-deployment-new-scaler   apps/v1.Deployment   cfos7210250-deployment-new   1     5     True    True     False      Unknown                                4m20s
+```
+
+### Check hpa
+➜ kubectl get hpa
+NAME                                         REFERENCE                               TARGETS                                       MINPODS   MAXPODS   REPLICAS   AGE
+keda-hpa-cfos7210250-deployment-new-scaler   Deployment/cfos7210250-deployment-new   4/50 (avg), 89518080/400M (avg) + 1 more...   1         5         2          6m22s
+```
+
+above indicate the cpu is 4m which is below the target (50), and memory is 895M which is beyond the target(400M), so a new cfos instance has been created 
+
+you can get detail events information from `kubectl describe hpa`
+
+### Check metrics configmap
+
+when deployed with --set cFOSmetricExample.enabled=true , a same metric configmap example has been created. 
+
+```bash
+➜  examples git:(main) ✗ k get cm cfos7210250-deployment-new-metrics-config -o yaml
+apiVersion: v1
+data:
+  metrics: |
+    [
+      {
+        "type": "resource",
+        "name": "cpu_usage",
+        "collection": "prometheus",
+        "labels": {
+          "resource_type": "cpu"
+        }
+      },
+      {
+        "type": "resource",
+        "name": "memory_usage",
+        "collection": "prometheus",
+        "labels": {
+          "resource_type": "memory"
+        }
+      },
+      {
+        "type": "cli",
+        "name": "session_count",
+        "query": "conntrack -C",
+        "collection": "prometheus",
+        "labels": {
+          "metric_type": "system"
+        }
+      }
+    ]
+kind: ConfigMap
+metadata:
+  annotations:
+    cfos.fortinet.com/config-type: metrics
+    meta.helm.sh/release-name: cfos7210250-deployment-new
+    meta.helm.sh/release-namespace: default
+  creationTimestamp: "2024-12-09T01:56:41Z"
+  labels:
+    app: cfos
+    app.kubernetes.io/instance: cfos7210250-deployment-new
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: cfos
+    app.kubernetes.io/version: 7.2.1.255
+    helm.sh/chart: cfos-0.1.20
+  name: cfos7210250-deployment-new-metrics-config
+  namespace: default
+  resourceVersion: "22637"
+  uid: fb573ccd-fe3e-4bd0-b4d9-6ff2d525d999
+➜  examples git:(main) ✗
+```
+### the default scaled metric value
+```bash
+  examples git:(main) ✗ k get scaledobject -o yaml
+apiVersion: v1
+items:
+- apiVersion: keda.sh/v1alpha1
+  kind: ScaledObject
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: cfos7210250-deployment-new
+      meta.helm.sh/release-namespace: default
+    creationTimestamp: "2024-12-09T01:56:43Z"
+    finalizers:
+    - finalizer.keda.sh
+    generation: 1
+    labels:
+      app.kubernetes.io/instance: cfos7210250-deployment-new
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: cfos
+      app.kubernetes.io/version: 7.2.1.255
+      helm.sh/chart: cfos-0.1.20
+      scaledobject.keda.sh/name: cfos7210250-deployment-new-scaler
+    name: cfos7210250-deployment-new-scaler
+    namespace: default
+    resourceVersion: "26241"
+    uid: 336e00fa-a4c7-4c8b-91a9-93033da7b095
+  spec:
+    cooldownPeriod: 300
+    maxReplicaCount: 5
+    minReplicaCount: 1
+    pollingInterval: 30
+    scaleTargetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: cfos7210250-deployment-new
+    triggers:
+    - metadata:
+        method: GET
+        targetValue: "50"
+        url: http://cfos7210250-deployment-new-metrics.default.svc.cluster.local:8080/metrics/cpu_usage
+        valueLocation: value
+      type: metrics-api
+    - metadata:
+        method: GET
+        targetValue: "400000000"
+        url: http://cfos7210250-deployment-new-metrics.default.svc.cluster.local:8080/metrics/memory_usage
+        valueLocation: value
+      type: metrics-api
+    - metadata:
+        method: GET
+        targetValue: "100"
+        url: http://cfos7210250-deployment-new-metrics.default.svc.cluster.local:8080/metrics/session_count
+        valueLocation: value
+      type: metrics-api
+  status:
+    conditions:
+    - message: ScaledObject is defined correctly and is ready for scaling
+      reason: ScaledObjectReady
+      status: "True"
+      type: Ready
+    - message: Scaling is performed because triggers are active
+      reason: ScalerActive
+      status: "True"
+      type: Active
+    - message: No fallbacks are active on this scaled object
+      reason: NoFallbackFound
+      status: "False"
+      type: Fallback
+    - status: Unknown
+      type: Paused
+    externalMetricNames:
+    - s0-metric-api-value
+    - s1-metric-api-value
+    - s2-metric-api-value
+    hpaName: keda-hpa-cfos7210250-deployment-new-scaler
+    lastActiveTime: "2024-12-09T02:14:14Z"
+    originalReplicaCount: 1
+    scaleTargetGVKR:
+      group: apps
+      kind: Deployment
+      resource: deployments
+      version: v1
+    scaleTargetKind: apps/v1.Deployment
+kind: List
+metadata:
+  resourceVersion: ""
+```
+
+### modify default scaledobject value.
+
+you can use `kubectl edit` or `kubectl patch` or `kubectl apply` or helm etc to modify the scaler.
+```
+ kubectl edit scaledobject cfos7210250-deployment-new-scaler
+```
+
+### check log 
+```bash
+kubect logs -f po/router-manager-zx5ds 
 ```
 result
 ```
-NAME      REFERENCE                               TARGETS                       MINPODS   MAXPODS   REPLICAS   AGE
-cfoshpa   Deployment/cfos7210250-deployment-new   cpu: 6%/50%, memory: 7%/70%   1         4         1          2m9s
+....
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CollectionManager).runCollector: Collected 2 metrics for memory_usage
+2024/12/09 02:16:53 yagosys.com/cni/pkg/kubernetes.ExecuteCommand: Command output - stdout: "2", stderr: ""
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CLICollector).Collect: Successfully parsed value 2.000000 from output: 2
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CLICollector).Collect: Processing pod default/cfos7210250-deployment-new-5884b5cf4f-sl2wm for CLI metrics
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CLICollector).Collect: Attempting to execute command in pod default/cfos7210250-deployment-new-5884b5cf4f-sl2wm container cfos: [conntrack -C]
+2024/12/09 02:16:53 yagosys.com/cni/pkg/kubernetes.ExecuteCommand: Executing command in pod default/cfos7210250-deployment-new-5884b5cf4f-sl2wm container cfos: [conntrack -C]
+2024/12/09 02:16:53 yagosys.com/cni/pkg/kubernetes.ExecuteCommand: Command output - stdout: "2", stderr: ""
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CLICollector).Collect: Successfully parsed value 2.000000 from output: 2
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CLICollector).Collect: CLI collection completed. Collected 2 values
+2024/12/09 02:16:53 yagosys.com/cni/pkg/collector.(*CollectionManager).runCollector: Collected 2 metrics for session_count
+2024/12/09 02:16:55 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: cpu_usage, value: 83
+2024/12/09 02:16:55 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: memory_usage, value: 2.72289792e+08
+2024/12/09 02:16:55 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: session_count, value: 2
+2024/12/09 02:16:56 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: cpu_usage, value: 83
+2024/12/09 02:16:56 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: memory_usage, value: 2.72289792e+08
+2024/12/09 02:16:56 yagosys.com/cni/pkg/logger.LogSuccess: Successfully served KEDA metric for: session_count, value: 2
 ```
 
-## apply cfos license via configmap file
-```bash
-kubectl apply -f cfos_license.yaml
-```
 
 ### Verify the license import 
 ```bash
@@ -260,6 +483,8 @@ Serial-Number: CFOSVLTMXXXX
 System time: Thu Oct 24 2024 03:31:40 GMT+0000 (UTC)
 
 ```
+
+
 
 ## create firewall policy via configmap file
 
