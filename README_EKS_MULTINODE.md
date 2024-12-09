@@ -182,12 +182,12 @@ cfos-chart/cfos	0.1.20       	7.2.1.255  	cfos for kubernetes with vxlan agent w
 ```
 - install with default value 
 ```
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos 
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos  --set persistence.enabled=true 
 
 ```
 this is same as 
 ```bash
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set routeManager.env.DEFAULT_FIREWALL_POLICY="UTM" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set routeManager.env.DEFAULT_FIREWALL_POLICY="UTM" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true --set persistence.enabled=true
 ```
 
 if you want overide the default parameter, such as image version etc, use 
@@ -196,7 +196,7 @@ if you want overide the default parameter, such as image version etc, use
 > for example, install arm cfos image as DaemonSet with appArmor profile set to unconstrained 
 
 ```bash
-helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet --set routeManager.env.DEFAULT_FIREWALL_POLICY="Layer4" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true 
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set image.tag=cfosarm64v255 --set appArmor.enable --set deployment.kind=DaemonSet --set routeManager.env.DEFAULT_FIREWALL_POLICY="Layer4" --set kedaScaling.enabled=true --set cFOSmetricExample.enabled=true  --set persistence.enabled=true
 ```
 
 ### verify the deployment
