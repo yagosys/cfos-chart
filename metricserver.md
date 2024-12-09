@@ -43,3 +43,9 @@ result
 2024/12/09 01:56:58 yagosys.com/cni/pkg/logger.LogSuccess: Metrics server started on port 8080
 2024/12/09 01:56:58 yagosys.com/cni/pkg/configmap.HandleMetricsConfigMap: Metrics server initialized successfully
 ```
+
+### query session
+```bash
+curl http://10.96.237.242:8080/metrics/session_count
+{"value":1}
+```
