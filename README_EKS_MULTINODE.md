@@ -146,6 +146,14 @@ ip-10-244-117-209.ec2.internal   Ready    <none>   2m37s   v1.30.4-eks-a737599
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 ```
 
+## deploy local-path storage class
+the demo helm will use local-path storage class to create pvc for cfos to save data. if cfos deployed as "Deployment" with multiple replicas, a shared persistant storage is required 
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+kubectl rollout status deployment local-path-provisioner -n local-path-storage
+```
+
 ## deploy keda 
 ```bash
 # Add KEDA Helm repository
