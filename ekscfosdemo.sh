@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash  -e
 
 saveVariableForEdit() {
     local region="${1:-default}"  
@@ -21,35 +21,34 @@ saveVariableForEdit() {
         
         echo "# Common Variables"
         echo "# ----------------"
-        echo "EKSVERSION=\"$EKSVERSION\""
-        echo "CLUSTERNAME=\"$CLUSTERNAME\""
-        echo "ISPRIVATE=\"$ISPRIVATE\""
-        echo "DNS_IP=\"$DNS_IP\""
-        echo "SERVICEIPV4CIDR=\"$SERVICEIPV4CIDR\""
-        echo "DESIREDWORKERNODESIZE=\"$DESIREDWORKERNODESIZE\""
-        echo "CFOSLICENSEYAMLFILE=\"$CFOSLICENSEYAMLFILE\""
-        echo "ALTERNATIVEDOWNLOADURL=\"$ALTERNATIVEDOWNLOADURL\""
-        echo "CFOSHELMREPO=\"$CFOSHELMREPO\""
-        echo "DEMOCFOSFIREWALLPOLICY=\"$DEMOCFOSFIREWALLPOLICY\""
-        echo "DST_IP_TOCHECK=\"$DST_IP_TOCHECK\""
-        echo "DST_TCP_PORT_TOCHECK=\"$DST_TCP_PORT_TOCHECK\""
+        echo "export EKSVERSION=\"$EKSVERSION\""
+        echo "export CLUSTERNAME=\"$CLUSTERNAME\""
+        echo "export ISPRIVATE=\"$ISPRIVATE\""
+        echo "export DNS_IP=\"$DNS_IP\""
+        echo "export SERVICEIPV4CIDR=\"$SERVICEIPV4CIDR\""
+        echo "export DESIREDWORKERNODESIZE=\"$DESIREDWORKERNODESIZE\""
+        echo "export CFOSLICENSEYAMLFILE=\"$CFOSLICENSEYAMLFILE\""
+        echo "export ALTERNATIVEDOWNLOADURL=\"$ALTERNATIVEDOWNLOADURL\""
+        echo "export CFOSHELMREPO=\"$CFOSHELMREPO\""
+        echo "export DEMOCFOSFIREWALLPOLICY=\"$DEMOCFOSFIREWALLPOLICY\""
+        echo "export DST_IP_TOCHECK=\"$DST_IP_TOCHECK\""
+        echo "export DST_TCP_PORT_TOCHECK=\"$DST_TCP_PORT_TOCHECK\""
         
         echo ""
         echo "# Region-Specific Variables for $region"
         echo "# ----------------"
-        echo "AWS_PROFILE=\"$AWS_PROFILE\""
-        echo "AWS_REGION=\"$AWS_REGION\""
-        echo "EC2_SERVICE=\"$EC2_SERVICE\""
-        echo "IAM_PREFIX=\"$IAM_PREFIX\""
+        echo "export AWS_PROFILE=\"$AWS_PROFILE\""
+        echo "export AWS_REGION=\"$AWS_REGION\""
+        echo "export EC2_SERVICE=\"$EC2_SERVICE\""
+        echo "export IAM_PREFIX=\"$IAM_PREFIX\""
         
         # Add MYIMAGEREPO only for China region
         if [ "$region" == "china" ]; then
-            echo "MYIMAGEREPO=\"$MYIMAGEREPO\""
+            echo "export MYIMAGEREPO=\"$MYIMAGEREPO\""
         fi
 
         echo ""
-        echo "# Export variables"
-        echo "export AWS_PROFILE AWS_REGION"
+        echo "# All variables are now exported"
         
     } > "$output_file"
 
@@ -119,7 +118,7 @@ set_common_variables() {
 
     ALTERNATIVEDOWNLOADURL=$(get_env_or_default \
         "CFOS_ALTERNATIVE_URL" \
-        "http://cfos-helm-charts.s3-website.cn-north-1.amazonaws.com.cn" \
+	"https://cfos-helm-charts.s3.cn-north-1.amazonaws.com.cn" \
         "Alternative Download URL")
 
     CFOSHELMREPO=$(get_env_or_default \
@@ -366,6 +365,7 @@ check_aws_profile() {
 }
 
 deploy_demo_pod() {
+echo kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml 
 kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml
 kubectl rollout status deployment diag 
 echo sleep 10 
@@ -844,6 +844,11 @@ deployCFOSandAgentChinaAWS() {
 
 
 install_metrics_server_ecr() {
+    # Check if metrics-server is already installed  
+    if kubectl get deployment metrics-server -n kube-system >/dev/null 2>&1; then
+        echo "✅ Metrics-server is already installed"
+        return 0
+    fi
 
     echo "Installing metrics-server for China region using ECR..."
     local yaml_file="components.yaml"
@@ -890,8 +895,14 @@ install_metrics_server_ecr() {
 }
 
 install_metrics_server() {
-        echo "Installing metrics-server for global region..."
-        kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+    # Check if metrics-server is already installed
+    if kubectl get deployment metrics-server -n kube-system >/dev/null 2>&1; then
+        echo "✅ Metrics-server is already installed"
+        return 0
+    fi
+
+    echo "Installing metrics-server for global region..."
+    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 
     # Wait for metrics-server deployment to be ready
     echo "Waiting for metrics-server to be ready..."
@@ -906,6 +917,8 @@ install_metrics_server() {
 }
 
 check_eks_cluster() {
+    echo "aws eks describe-cluster --name $CLUSTERNAME --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1"
+    
     if aws eks describe-cluster --name $CLUSTERNAME --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1; then
         return 0 # Cluster exists
     else
@@ -979,14 +992,31 @@ is_china_region() {
     [[ $AWS_REGION == cn-* ]]
 }
 
-# Function to check CloudFormation stack status
+function delete_cloudformation_stack() {
+
+    local stack_name="eksctl-${CLUSTERNAME}-cluster"
+    echo "aws cloudformation describe-stacks --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1"
+    if aws cloudformation describe-stacks --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1; then
+        echo "Stack exists, deleting stack $stack_name..."
+        aws cloudformation delete-stack --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE
+        echo "Stack exists and deletion initiated"
+        return 0 # Stack exists and deletion initiated
+    else
+        return 1 # Stack doesn't exist
+    fi
+}
+
 check_cloudformation_stack() {
     local stack_name="eksctl-${CLUSTERNAME}-cluster"
     
     echo "Checking CloudFormation stack status..."
+    echo "aws cloudformation describe-stacks --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1"
     
     if aws cloudformation describe-stacks --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1; then
-        return 0 # Stack exists
+#        echo "Stack exists, deleting stack $stack_name..."
+#        aws cloudformation delete-stack --stack-name "$stack_name" --region $AWS_REGION --profile $AWS_PROFILE
+#        echo "Stack exists and deletion initiated"
+        return 0 # Stack exists and deletion initiated
     else
         return 1 # Stack doesn't exist
     fi
@@ -1017,6 +1047,7 @@ wait_for_stack_deletion() {
 
 create_node_role() {
     # Check if role already exists
+    echo "aws iam get-role --role-name eksNodeRole --profile $AWS_PROFILE 2>/dev/null" 
     if ! aws iam get-role --role-name eksNodeRole --profile $AWS_PROFILE 2>/dev/null; then
         # Create trust policy document with dynamic EC2 service
         cat << EOF > node-trust-policy.json
@@ -1056,6 +1087,11 @@ EOF
             --policy-arn ${IAM_PREFIX}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly \
             --profile $AWS_PROFILE || return 1
 
+        aws iam attach-role-policy \
+            --role-name eksNodeRole \
+            --policy-arn ${IAM_PREFIX}:iam::aws:policy/AmazonSSMManagedInstanceCore \
+            --profile $AWS_PROFILE || return 1
+
         echo "Waiting for role to be fully created..."
         sleep 10
     else
@@ -1077,7 +1113,6 @@ create_cluster_only() {
     PODCIDR="10.244.0.0/16"
     AVAILABILITY_ZONES=$(aws ec2 describe-availability-zones --region $AWS_REGION --profile $AWS_PROFILE --query "AvailabilityZones[?State=='available'].ZoneName" --output text | tr '\t' ',' | cut -d',' -f1-2)
     filename="way3cluster.yaml"
-
     cat > $filename << EOF
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
@@ -1112,6 +1147,18 @@ accessConfig:
 kubernetesNetworkConfig:
   ipFamily: IPv4
   serviceIPv4CIDR: ${SERVICEIPV4CIDR}
+
+addons:
+  - name: vpc-cni
+    version: latest
+  - name: kube-proxy
+    version: latest
+  - name: coredns
+    version: latest
+  - name: metrics-server
+    version: latest
+  - name: eks-pod-identity-agent
+    version: latest
 EOF
 
     # Check if file was created successfully
@@ -1124,6 +1171,38 @@ EOF
 }
 
 
+function create_eks_worker_node_key_pair () {
+
+# Variables
+KEY_NAME="my_key_pair_eks_cfos_demo"
+KEY_PATH="$HOME/.ssh/id_rsa.pub"
+
+echo creating keypair with name $KEY_NAME with $KEY_PATH
+
+# Check if the public key exists
+if [ ! -f "$KEY_PATH" ]; then
+    echo "Public key not found at $KEY_PATH. Creating a new key pair..."
+    ssh-keygen -t rsa -b 2048 -f "$HOME/.ssh/id_rsa" -N ""
+    echo "Key pair created."
+else
+    echo "Public key found at $KEY_PATH."
+fi
+
+# Check if the key pair already exists in AWS
+EXISTING_KEY=$(aws ec2 describe-key-pairs --key-name "$KEY_NAME" --query 'KeyPairs[0].KeyName' --output text 2>/dev/null)
+
+if [ "$EXISTING_KEY" == "$KEY_NAME" ]; then
+    echo "Key pair $KEY_NAME already exists in AWS. Deleting it..."
+    aws ec2 delete-key-pair --key-name "$KEY_NAME"
+    echo "Existing key pair deleted."
+fi
+
+# Import the public key into AWS
+echo "Importing the public key into AWS..."
+aws ec2 import-key-pair --key-name "$KEY_NAME" --public-key-material fileb://"$KEY_PATH"
+echo "Key pair imported successfully."
+
+}
 
 create_nodegroups() {
     echo "Creating nodegroups only..."
@@ -1134,6 +1213,10 @@ create_nodegroups() {
         --query 'Subnets[*].SubnetId' \
         --output text \
         --profile $AWS_PROFILE)
+
+echo "Creating Key $KEY_NAME for ssh into worker node" 
+
+create_eks_worker_node_key_pair
 
     # Create nodegroups
     for ng in "ng-app" "ng-security"; do
@@ -1153,7 +1236,8 @@ create_nodegroups() {
             --subnets ${SUBNET_IDS} \
             --labels $labels \
             --region $AWS_REGION \
-            --profile $AWS_PROFILE
+            --profile $AWS_PROFILE \
+            --remote-access ec2SshKey=$KEY_NAME
     done
 
     # Wait for nodegroups to be ready
@@ -1192,11 +1276,13 @@ delete_cluster() {
     echo "Starting cluster deletion process..."
     
     # Check if cluster exists first
+    echo "aws eks describe-cluster --name $CLUSTERNAME --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1"
     if ! aws eks describe-cluster --name $CLUSTERNAME --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1; then
         echo "Cluster $CLUSTERNAME does not exist"
     else
         # Delete nodegroups first
         for ng in "ng-app" "ng-security"; do
+        echo "aws eks describe-nodegroup --cluster-name $CLUSTERNAME --nodegroup-name $ng --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1"
             if aws eks describe-nodegroup --cluster-name $CLUSTERNAME --nodegroup-name $ng --region $AWS_REGION --profile $AWS_PROFILE >/dev/null 2>&1; then
                 echo "Deleting nodegroup: $ng"
                 aws eks delete-nodegroup \
@@ -1235,6 +1321,7 @@ delete_cluster() {
     fi
 
     # Delete IAM role and its policies
+    echo "aws iam get-role --role-name eksNodeRole --profile $AWS_PROFILE >/dev/null 2>&1" 
     if aws iam get-role --role-name eksNodeRole --profile $AWS_PROFILE >/dev/null 2>&1; then
         echo "Deleting IAM role policies..."
         
@@ -1253,6 +1340,11 @@ delete_cluster() {
             --role-name eksNodeRole \
             --policy-arn ${IAM_PREFIX}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly \
             --profile $AWS_PROFILE
+
+        aws iam detach-role-policy \
+            --role-name eksNodeRole \
+            --policy-arn ${IAM_PREFIX}:iam::aws:policy/AmazonSSMManagedInstanceCore \
+            --profile $AWS_PROFILE 
 
         echo "Deleting IAM role..."
         aws iam delete-role --role-name eksNodeRole --profile $AWS_PROFILE
@@ -1344,6 +1436,7 @@ case "$1" in
         ;;
     delete_all)
         delete_cluster || exit 1
+	delete_cloudformation_stack || exit 1
         ;;
     deleteCFOSandAgent)
         check_license_file
