@@ -128,7 +128,7 @@ set_common_variables() {
 
     DEMOCFOSFIREWALLPOLICY=$(get_env_or_default \
         "DEMOCFOSFIREWALLPOLICY" \
-        "Layer4" \
+        "UTM" \
         "Demo CFOS Firewall Policy")
 
     DST_IP_TOCHECK=$(get_env_or_default \
@@ -1212,7 +1212,9 @@ create_nodegroups() {
         --filters "Name=vpc-id,Values=$(aws eks describe-cluster --name $CLUSTERNAME --region $AWS_REGION --profile $AWS_PROFILE --query 'cluster.resourcesVpcConfig.vpcId' --output text)" \
         --query 'Subnets[*].SubnetId' \
         --output text \
+	--region $AWS_REGION \
         --profile $AWS_PROFILE)
+    echo $SUBNET_IDS
 
 echo "Creating Key $KEY_NAME for ssh into worker node" 
 
