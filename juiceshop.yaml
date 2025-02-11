@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: juiceshop
+  namespace: security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: juiceshop
+  template:
+    metadata:
+      labels:
+        app: juiceshop
+    spec:
+      containers:
+        - name: juiceshop
+          image: bkimminich/juice-shop:latest
+          ports:
+            - containerPort: 3000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: juiceshop-service
+  namespace: security
+spec:
+  selector:
+    app: juiceshop
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+
