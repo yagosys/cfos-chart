@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backend
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diag2
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diag2
+  template:
+    metadata:
+      labels:
+        app: diag2
+        protectedby: cfos
+    spec:
+      containers:
+        - name: praqma
+          image: praqma/network-multitool
+          ports:
+            - containerPort: 80
+          args:
+            - /bin/sh
+            - -c
+            - /usr/sbin/nginx -g "daemon off;"
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN","SYS_ADMIN","NET_RAW"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diag2-service
+  namespace: backend
+spec:
+  selector:
+    app: diag2
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 80
