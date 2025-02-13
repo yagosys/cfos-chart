@@ -527,7 +527,8 @@ function test_diag2() {
 
     # Define the Juice Shop service address in a variable using parameters
     local service_address="http://${target_svc_name}.${target_svc_namespace}.svc.cluster.local:3000/"
-    local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+    local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
+
 
    
 
