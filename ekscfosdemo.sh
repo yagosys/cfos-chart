@@ -513,8 +513,7 @@ create_and_apply_diag2_yaml
 
 function send_attack_traffic() {
 echo test_diag2 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal'
-test_diag2 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal'
-
+test_diag2 "$@"
 }
 
 function test_diag2() {
@@ -1635,6 +1634,28 @@ create_eks_worker_node_key_pair
     echo "✅ All nodegroups are ready"
 }
 
+function create_apply_cfos_configmap_demo1() {
+    filename="cfosconfigmapwebprofiledemo1.yaml"
+    cat << EOF | tee $filename
+apiVersion: v1
+data:
+  config: |-
+    config webfilter profile
+    edit "default"
+        config ftgd-wf
+            set options error-allow
+        end
+    end
+  type: partial
+kind: ConfigMap
+metadata:
+  labels:
+    app: fos
+    category: config
+  name: webprofileerrorpass
+EOF
+kubectl apply -f $filename 
+}
 
 delete_cluster() {
     echo "Starting cluster deletion process..."
@@ -1828,7 +1849,9 @@ case "$1" in
         saveVariableForEdit "$2"
 	;;
     sendAttackToClusterIP)
-       send_attack_traffic || exit 1
+       create_apply_cfos_configmap_demo1 || exit 1
+       shift 2
+       send_attack_traffic "$@" || exit 1
         ;;
     *)
         print_usage
