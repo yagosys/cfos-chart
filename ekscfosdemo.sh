@@ -574,6 +574,18 @@ function test_diag2() {
         local payload='curl -s --max-time 5 -H "User-Agent: BlackSun"'
         local logfile_name="ips.0"
         ;;
+    eicar)
+        local payload='curl -s --max-time 5 --data "$(echo 'WDUhUCUAQFswXFBaWDU0KFApKTdDQyl9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=' | base64 --decode)"'
+        local logfile_name="av.0"
+        ;;
+    trojan)
+        local payload='curl -s --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9dHJvamFuX3NpZ25hdHVyZQ==' | base64 --decode)"'
+        local logfile_name="av.0"
+        ;;
+    worm)
+        local payload='curl -s --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 --decode)"'
+        local logfile_name="av.0"
+        ;;
     *)
         local payload='curl -s -I --max-time 5'
         local logfile_name="ips.0"
@@ -1837,7 +1849,8 @@ case "$1" in
         check_license_file || exit 1 
         deploy_cfos_and_agent "$2" || exit 1
         deploy_demo_pod  || exit 1
-	send_attack_traffic || exit 1 
+        create_apply_cfos_configmap_demo1 || exit 1
+	    send_attack_traffic || exit 1 
         ;;
     checkPrerequisites)
         check_prerequisites || exit 1
@@ -1852,17 +1865,25 @@ case "$1" in
     sendAttackToClusterIP)
        create_apply_cfos_configmap_demo1 || exit 1
        if [ "$#" -le 2 ]; then
-	   echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile>  <source pod label> <source namespace>  <target svc name>  <target namespace>  <ips type> "
-	   echo "✅ now use default "
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' 'traffic.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'log4j' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'shellshock' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'xss' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'lfi' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'rfi' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'user_agent_malware' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'sql_injection' 'ips.0' || exit 1
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'directory_traversal' 'ips.0' || exit 1
+           echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile>  <source pod label> <source namespace>  <target svc name>  <target namespace>  <ips type> "
+           echo "✅ now use default "
+           declare -A attack_types=(
+               ["normal"]="traffic.0"
+               ["log4j"]="ips.0"
+               ["shellshock"]="ips.0"
+               ["xss"]="ips.0"
+               ["lfi"]="ips.0"
+               ["rfi"]="ips.0"
+               ["user_agent_malware"]="ips.0"
+               ["sql_injection"]="ips.0"
+               ["directory_traversal"]="ips.0"
+               ["eicar"]="av.0"
+               ["trojan"]="av.0"
+               ["worm"]="av.0"
+           )
+           for attack in "${!attack_types[@]}"; do
+               send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "${attack_types[$attack]}" || exit 1
+           done
        else
            shift 2
            send_attack_traffic "$@" || exit 1
