@@ -578,6 +578,10 @@ function test_diag2() {
 	local payload='curl -s -k -O https://secure.eicar.org/eicar.com.txt'
         local logfile_name="virus.0"
         ;;
+    eicardownload1)
+	local payload='curl -O https://secure.eicar.org/eicar_passwd.zip'
+        local logfile_name="virus.0"
+        ;;
     eicarupload)
         curl -k -O https://secure.eicar.org/eicar_com.zip 
 	kubectl cp eicar_com.zip $(kubectl get pods -l app=diag2 -n backend -o jsonpath='{.items[0].metadata.name}'):/tmp/eicar_com.zip -n backend
@@ -1884,6 +1888,7 @@ case "$1" in
                ["sql_injection"]="ips.0"
                ["directory_traversal"]="ips.0"
                ["eicardownload"]="virus.0"
+               ["eicardownload1"]="virus.0"
                ["eicarupload"]="virus.0"
                ["trojan"]="virus.0"
                ["worm"]="virus.0"
