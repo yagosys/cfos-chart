@@ -6,7 +6,7 @@ function install_latest_aws_cli() {
 
   case "$architecture" in
     aarch64*)
-      arch="arm64"
+      arch="x86_64"
       ;;
     x86_64*)
       arch="amd64"
@@ -21,7 +21,7 @@ function install_latest_aws_cli() {
   echo "Detected architecture: $arch"
 
   # 2. Check if aws command exists and get its location
-  aws_path=$(command -v aws)
+  aws_path=$(command -v aws) || echo check aws exist
 
   if [ -n "$aws_path" ]; then
     echo "Existing AWS CLI installation found at: $aws_path"
@@ -61,8 +61,8 @@ function install_latest_aws_cli() {
   unzip -qq "$zip_file" -d "$temp_dir"
 
   if ! sudo "$temp_dir/aws/install" \
-      --install-dir="$install_prefix/aws-cli" \
-      --bin-dir="$install_prefix/bin" ; then
+      --install-dir "$install_prefix/aws-cli" \
+      --bin-dir "$install_prefix/bin" ; then
     echo "Error during AWS CLI installation."
     echo "Please check the error messages above or try running the install script manually from '$temp_dir/aws/'"
     return 1 # Indicate failure
@@ -264,6 +264,11 @@ set_china_aws_variable() {
 # Set AWS profile and region for aws global
 set_global_aws_variable() {
     # Set common variables first
+
+    if ! command -v aws ; then
+        install_latest_aws_cli
+    fi
+
     set_common_variables
 
     # Set Global-specific variables with environment variable support
@@ -512,7 +517,6 @@ create_and_apply_diag2_yaml
 }
 
 function send_attack_traffic() {
-echo test_diag2 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal'
 test_diag2 "$@"
 }
 
@@ -579,7 +583,7 @@ function test_diag2() {
         local logfile_name="virus.0"
         ;;
     eicardownload1)
-	local payload='curl -O https://secure.eicar.org/eicar_passwd.zip'
+	local payload='curl -s -k -O https://secure.eicar.org/eicar_passwd.zip'
         local logfile_name="virus.0"
         ;;
     eicarupload)
@@ -595,6 +599,11 @@ function test_diag2() {
     worm)
         local payload='curl -s -I --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 -d)"'
         local logfile_name="virus.0"
+        ;;
+     cve1)
+        local payload='curl -X POST -H "Content-Type: application/json" \
+  -d "{\"query\": \"hello; echo vulnerable > /tmp/proof.txt #\", \"response_mode\": \"compact\"}"'
+        local logfile_name="ips.0"
         ;;
     *)
         local payload='curl -s -I --max-time 5'
@@ -1887,11 +1896,7 @@ case "$1" in
                ["user_agent_malware"]="ips.0"
                ["sql_injection"]="ips.0"
                ["directory_traversal"]="ips.0"
-               ["eicardownload"]="virus.0"
-               ["eicardownload1"]="virus.0"
                ["eicarupload"]="virus.0"
-               ["trojan"]="virus.0"
-               ["worm"]="virus.0"
            )
            for attack in "${!attack_types[@]}"; do
                send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "${attack_types[$attack]}" || exit 1
