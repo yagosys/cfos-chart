@@ -6,10 +6,10 @@ function install_latest_aws_cli() {
 
   case "$architecture" in
     aarch64*)
-      arch="x86_64"
+      arch="arm64"
       ;;
     x86_64*)
-      arch="amd64"
+      arch="x86_64"
       ;;
     *)
       echo "Unsupported architecture: $architecture"
