@@ -606,7 +606,7 @@ run_curl_in_pod() {
 
     # Run the curl command inside the pod
     echo "kubectl exec $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
-    echo "waiting result"
+    echo "✅  waiting result"
     kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
     sleep 2
 }
@@ -1760,7 +1760,7 @@ print_usage() {
     echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
     echo "  checkPrerequisites                  - Check Whether the program is able to run" 
     echo "  saveconfig                          - Save Default Variable for edit"
-    echo "  sendAttackToClusterIP               - Send ips attack to juiceshop clusterip address"
+    echo "  sendAttackToClusterIP               - Send attack to clusterip type of svc address"
     echo "  installDep                          - install Dependencies -eksctl ."
     echo "Region (optional):"
     echo "  china                      - Use China region settings"
@@ -1849,13 +1849,19 @@ case "$1" in
         saveVariableForEdit "$2"
 	;;
     sendAttackToClusterIP)
-       set -x
        create_apply_cfos_configmap_demo1 || exit 1
        if [ "$#" -le 2 ]; then
-	   echo usage ./ekscfosdemo.sh sendAttackToClusterIP global app=diag2 backend juiceshop-service security log4j
-	   echo now use default 
-           echo send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' 
-           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' || exit 1
+	   echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile>  <source pod label> <source namespace>  <target svc name>  <target namespace>  <ips type> "
+	   echo "✅ now use default "
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' 'traffic.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'log4j' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'shellshock' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'xss' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'lfi' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'rfi' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'user_agent_malware' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'sql_injection' 'ips.0' || exit 1
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'directory_traversal' 'ips.0' || exit 1
        else
            shift 2
            send_attack_traffic "$@" || exit 1
