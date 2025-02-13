@@ -1849,9 +1849,17 @@ case "$1" in
         saveVariableForEdit "$2"
 	;;
     sendAttackToClusterIP)
+       set -x
        create_apply_cfos_configmap_demo1 || exit 1
-       shift 2
-       send_attack_traffic "$@" || exit 1
+       if [ "$#" -le 2 ]; then
+	   echo usage ./ekscfosdemo.sh sendAttackToClusterIP global app=diag2 backend juiceshop-service security log4j
+	   echo now use default 
+           echo send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' 
+           send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' 'normal' || exit 1
+       else
+           shift 2
+           send_attack_traffic "$@" || exit 1
+       fi
         ;;
     *)
         print_usage
