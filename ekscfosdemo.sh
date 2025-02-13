@@ -574,8 +574,14 @@ function test_diag2() {
         local payload='curl -s -I --max-time 5 -H "User-Agent: BlackSun"'
         local logfile_name="ips.0"
         ;;
-    eicar)
-        local payload='curl -s -I --max-time 5 --data "$(echo 'WDUhUCUAQFswXFBaWDU0KFApKTdDQyl9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=' | base64 -d)"'
+    eicardownload)
+	local payload='curl -s -k -O https://secure.eicar.org/eicar.com.txt'
+        local logfile_name="virus.0"
+        ;;
+    eicarupload)
+        curl -k -O https://secure.eicar.org/eicar_com.zip 
+	kubectl cp eicar_com.zip $(kubectl get pods -l app=diag2 -n backend -o jsonpath='{.items[0].metadata.name}'):/tmp/eicar_com.zip -n backend
+        local payload='curl -v -F "file=@/tmp/eicar_com.zip"'
         local logfile_name="virus.0"
         ;;
     trojan)
@@ -1877,7 +1883,8 @@ case "$1" in
                ["user_agent_malware"]="ips.0"
                ["sql_injection"]="ips.0"
                ["directory_traversal"]="ips.0"
-               ["eicar"]="virus.0"
+               ["eicardownload"]="virus.0"
+               ["eicarupload"]="virus.0"
                ["trojan"]="virus.0"
                ["worm"]="virus.0"
            )
