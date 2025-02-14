@@ -2,7 +2,13 @@
 
 function install_latest_aws_cli() {
   # 1. Check system architecture
+if [ "$(uname -o)" = "Darwin" ]; then
+    HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade awscli || echo "Failed to upgrade awscli. Command: HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade awscli"
+fi
+
+
   architecture=$(uname -m)
+
 
   case "$architecture" in
     aarch64*)
@@ -13,12 +19,14 @@ function install_latest_aws_cli() {
       ;;
     *)
       echo "Unsupported architecture: $architecture"
-      echo "This script only supports arm64 and amd64."
+      echo "This script only supports installDep on  aarch64 and x86_64 with a linux system."
+      echo "for mac system, try install eksctl, awscli, helm etc on your own"
+      echo "Detected architecture: $arch" on os is $(uname -o)
       return 1 # Indicate failure
       ;;
   esac
 
-  echo "Detected architecture: $arch"
+  echo "Detected architecture: $arch" on os is $(uname -o)
 
   # 2. Check if aws command exists and get its location
   aws_path=$(command -v aws) || echo check aws exist
@@ -420,12 +428,6 @@ check_prerequisites() {
 deploy_cfos_and_agent() {
     local region=$1
 
-#    if [ "$region" == "china" ]; then
-#        set_china_aws_variable
-#    else
-#        set_global_aws_variable
-#    fi
-
     echo ${DEMOCFOSFIREWALLPOLICY}
 
     # Deploy components in sequence
@@ -439,10 +441,10 @@ deploy_cfos_and_agent() {
         return 1
     }
 
-    applyCFOSLicense || {
-        echo "❌ Failed to apply CFOS license"
-        return 1
-    }
+#    applyCFOSLicense || {
+#        echo "❌ Failed to apply CFOS license"
+#        return 1
+#    }
 
     deployCFOSandAgentChinaAWS "$region" || {
         echo "❌ Failed to deploy CFOS and Agent"
@@ -854,7 +856,7 @@ deleteCFOSandAgent() {
     done
 
     # Additional cleanup: Delete namespaces if they exist
-    local namespaces=("keda" "local-path-storage")
+    local namespaces=("keda" "local-path-storage" "backend" "security")
     
     for ns in "${namespaces[@]}"; do
         if kubectl get namespace "$ns" &>/dev/null; then
@@ -865,7 +867,12 @@ deleteCFOSandAgent() {
         fi
     done
 
+    echo delete fos-license configmap 
+
+    kubectl delete cm fos-license  || echo failed to delete cm fos-license
+
     echo "Cleanup completed"
+
     return 0
 }
 
@@ -1198,6 +1205,7 @@ deployCFOSandAgentChinaAWS() {
 	    --set kedaScaling.enabled=$enableKeda \
             --set cFOSmetricExample.enabled=true \
             --set persistence.enabled=true \
+            --set image.tag=fos-multiarch-v70255 \
             --set initContainers.image.repository=${MYIMAGEREPO}/busybox; then
             
             echo "❌ Failed to install/upgrade CFOS"
@@ -1213,7 +1221,8 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-            --set kedaScaling.enabled=true \
+	    --set kedaScaling.enabled=$enableKeda \
+            --set image.tag=fos-multiarch-v70255 \
             --set persistence.enabled=true \
             --set cFOSmetricExample.enabled=true; then
             
@@ -1668,6 +1677,7 @@ create_eks_worker_node_key_pair
 
 function create_apply_cfos_configmap_demo1() {
     filename="cfosconfigmapwebprofiledemo1.yaml"
+    kubectl delete -f $filename || failed to delete configmap $filename 
     cat << EOF | tee $filename
 apiVersion: v1
 data:
@@ -1686,7 +1696,7 @@ metadata:
     category: config
   name: webprofileerrorpass
 EOF
-kubectl apply -f $filename 
+kubectl apply -f $filename || failed to apply configmap $filename
 }
 
 delete_cluster() {
@@ -1852,6 +1862,7 @@ case "$1" in
         ;;
     deploycFOSAndAgent)
        deploy_cfos_and_agent "$2" || exit 1
+       applyCFOSLicense || exit 1
         ;;
     delete_all)
         delete_cluster || exit 1
@@ -1866,45 +1877,46 @@ case "$1" in
         ;;
     demo)
         check_license_file || exit 1 
+	if ! eksctl get cluster ${CLUSTERNAME} ; then
+        create_cluster_only || return 1
+        create_nodegroups || return 1
+	fi 
         deploy_cfos_and_agent "$2" || exit 1
+        applyCFOSLicense || exit 1 
         deploy_demo_pod  || exit 1
         create_apply_cfos_configmap_demo1 || exit 1
-	    send_attack_traffic || exit 1 
+	send_attack_traffic || exit 1 
         ;;
     checkPrerequisites)
         check_prerequisites || exit 1
         ;;
     installDep)
-	upgradeLatestEKSCTL || exist 1
-        install_latest_aws_cli || exist 1
+	upgradeLatestEKSCTL || exit 1
+        install_latest_aws_cli || exit 1
 	;;
     saveconfig)
         saveVariableForEdit "$2"
 	;;
     sendAttackToClusterIP)
        create_apply_cfos_configmap_demo1 || exit 1
-       if [ "$#" -le 2 ]; then
-           echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile>  <source pod label> <source namespace>  <target svc name>  <target namespace>  <ips type> "
-           echo "✅ now use default "
-           declare -A attack_types=(
-               ["normal"]="traffic.0"
-               ["log4j"]="ips.0"
-               ["shellshock"]="ips.0"
-               ["xss"]="ips.0"
-               ["lfi"]="ips.0"
-               ["rfi"]="ips.0"
-               ["user_agent_malware"]="ips.0"
-               ["sql_injection"]="ips.0"
-               ["directory_traversal"]="ips.0"
-               ["eicarupload"]="virus.0"
-           )
-           for attack in "${!attack_types[@]}"; do
-               send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "${attack_types[$attack]}" || exit 1
-           done
-       else
-           shift 2
-           send_attack_traffic "$@" || exit 1
-       fi
+
+if [ "$#" -le 2 ]; then
+    echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile> <source pod label> <source namespace> <target svc name> <target namespace> <ips type> "
+    echo "✅ now use default "
+
+    # Loop through attack types and send attack traffic
+    for attack in "normal" "log4j" "shellshock" "xss" "lfi" "rfi" "user_agent_malware" "sql_injection" "directory_traversal"; do
+        send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "ips.0" || exit 1
+    done
+    
+    # Handle the exception for "eicarupload"
+    send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "eicarupload" "virus.0" || exit 1
+    
+else
+    shift 2
+    send_attack_traffic "$@" || exit 1
+fi
+
         ;;
     *)
         print_usage
