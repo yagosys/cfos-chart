@@ -639,7 +639,7 @@ run_curl_in_pod() {
     fi
 
     # Run the curl command inside the pod
-    echo "kubectl exec $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
+    echo "kubectl exec -it $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
     echo "✅  waiting result"
     kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
     sleep 2
@@ -870,6 +870,9 @@ deleteCFOSandAgent() {
     echo delete fos-license configmap 
 
     kubectl delete cm fos-license  || echo failed to delete cm fos-license
+
+    echo delete webprofileerrorpass configmap 
+    kubectl delete cm webprofileerrorpass || echo failed to delete cm webprofileerrorpass 
 
     echo "Cleanup completed"
 
@@ -1677,11 +1680,15 @@ create_eks_worker_node_key_pair
 
 function create_apply_cfos_configmap_demo1() {
     filename="cfosconfigmapwebprofiledemo1.yaml"
-    kubectl delete -f $filename || failed to delete configmap $filename 
     cat << EOF | tee $filename
 apiVersion: v1
 data:
   config: |-
+    config log syslogd setting
+      set status enable
+      set server "fazcfos2025.eastus.cloudapp.azure.com"
+      set interface "eth0"
+    end
     config webfilter profile
     edit "default"
         config ftgd-wf
@@ -1877,6 +1884,7 @@ case "$1" in
         ;;
     demo)
         check_license_file || exit 1 
+        applyCFOSLicense || exit 1 
 	if ! eksctl get cluster ${CLUSTERNAME} ; then
         create_cluster_only || return 1
         create_nodegroups || return 1
