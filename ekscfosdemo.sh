@@ -1884,11 +1884,11 @@ case "$1" in
         ;;
     demo)
         check_license_file || exit 1 
-        applyCFOSLicense || exit 1 
 	if ! eksctl get cluster ${CLUSTERNAME} ; then
         create_cluster_only || return 1
         create_nodegroups || return 1
 	fi 
+        applyCFOSLicense || exit 1 
         deploy_cfos_and_agent "$2" || exit 1
         applyCFOSLicense || exit 1 
         deploy_demo_pod  || exit 1
