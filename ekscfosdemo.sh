@@ -125,7 +125,7 @@ saveVariableForEdit() {
         
 	echo "#helm Varible"
 	echo "# -----------------"
-	echo "export enableKeda=\"$enableKeda\""
+	echo "export deployScaledObjectwithhelmchart=\"$deployScaledObjectwithhelmchart\""
 
         # Add MYIMAGEREPO only for China region
         if [ "$region" == "china" ]; then
@@ -226,10 +226,10 @@ set_common_variables() {
         "443" \
         "Destination TCP Port to Check")
 
-    enableKeda=$(get_env_or_default \
-	"enableKeda" \
+    deployScaledObjectwithhelmchart=$(get_env_or_default \
+	"deployScaledObjectwithhelmchart" \
 	"true" \
-	"enable Keda based scaling")
+	"enable use cfos helm chart to deploy scaledobject")
 }
 
 # Set AWS profile and region for aws china
@@ -522,6 +522,14 @@ function send_attack_traffic() {
 test_diag2 "$@"
 }
 
+function updatecFOSsignuatre() 
+{
+
+    local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
+   echo update $cfos_pod_name signiature
+   if ! kubectl exec -it po/$cfos_pod_name  -- update ; then echo update failed; fi
+}
+
 function test_diag2() {
     # Parameters from command line - now all 4 are expected from CLI, with defaults inside function
     label_selector_source_pod="${1:-app=diag2}"
@@ -534,9 +542,6 @@ function test_diag2() {
     # Define the Juice Shop service address in a variable using parameters
     local service_address="http://${target_svc_name}.${target_svc_namespace}.svc.cluster.local:3000/"
     local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
-
-
-   
 
 
     case "$payload_type" in
@@ -556,6 +561,14 @@ function test_diag2() {
         local payload='curl -s -I --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
         local logfile_name="ips.0"
         ;;
+    normalfileupload)
+        local payload='curl  --max-time 5 -v -F "file=@/etc/passwd"'
+        local logfile_name="app.0"
+        ;;
+    segdownload)
+	local payload='curl -v -r 250000-499999'
+	local logfile_name="app.0"
+	;;
     xss)
         local payload='curl -s -I --max-time 5 --data "search=<script>alert(1)</script>"'
         local logfile_name="ips.0"
@@ -631,7 +644,8 @@ run_curl_in_pod() {
     local pod_namespace="${namespace_source_pod}"
 
     # Get the pod name with the specified label selector and namespace
-    POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" -o jsonpath='{.items[0].metadata.name}')
+  #  POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" -o jsonpath='{.items[0].metadata.name}')
+    POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 
     if [ -z "$POD_NAME" ]; then
         echo "No pod found with label '$pod_label_selector' in namespace '$pod_namespace'"
@@ -639,6 +653,7 @@ run_curl_in_pod() {
     fi
 
     # Run the curl command inside the pod
+    kubectl exec $POD_NAME --namespace "$pod_namespace" -- ip route get ${SERVICEIPV4CIDR%/*} | grep 'vxlan0'  || echo failed to check route 10.96.0.0
     echo "kubectl exec -it $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
     echo "✅  waiting result"
     kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
@@ -810,6 +825,11 @@ deploykeda() {
     return 0
 }
 
+deleteKeda() {
+    helm uninstall keda -n keda  || echo uninstall keda failed , maybe keda not exist 
+    kubectl delete namespace keda || echo delete namespace keda failed, maybe namespace keda not exist 
+}
+
 deleteCFOSandAgent() {
     echo "Starting deletion of CFOS and related components..."
 
@@ -839,7 +859,8 @@ deleteCFOSandAgent() {
     fi
 
     # Delete components if yaml exists
-    local files=("components.yaml" "local-path-storage.yaml" "keda-2.12.1.yaml")
+#    local files=("components.yaml" "local-path-storage.yaml" "keda-2.12.1.yaml")
+    local files=("components.yaml" "local-path-storage.yaml" )
     
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
@@ -855,8 +876,10 @@ deleteCFOSandAgent() {
         fi
     done
 
+
     # Additional cleanup: Delete namespaces if they exist
-    local namespaces=("keda" "local-path-storage" "backend" "security")
+    #local namespaces=("keda" "local-path-storage" )
+    local namespaces=("local-path-storage" )
     
     for ns in "${namespaces[@]}"; do
         if kubectl get namespace "$ns" &>/dev/null; then
@@ -872,7 +895,10 @@ deleteCFOSandAgent() {
     kubectl delete cm fos-license  || echo failed to delete cm fos-license
 
     echo delete webprofileerrorpass configmap 
-    kubectl delete cm webprofileerrorpass || echo failed to delete cm webprofileerrorpass 
+    kubectl delete cm demo1configmap || echo failed to delete cm demo1configmap
+
+    #kubectl delete deployment diag2 -n backend || echo delete failed 
+    #kubectl delete deployment juiceshop -n security || echo delete failed 
 
     echo "Cleanup completed"
 
@@ -1205,7 +1231,8 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-	    --set kedaScaling.enabled=$enableKeda \
+            --set routeManager.image.tag="cni0.1.25fixwrongip" \
+	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set cFOSmetricExample.enabled=true \
             --set persistence.enabled=true \
             --set image.tag=fos-multiarch-v70255 \
@@ -1224,7 +1251,8 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-	    --set kedaScaling.enabled=$enableKeda \
+            --set routeManager.image.tag="cni0.1.25fixwrongip" \
+	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set image.tag=fos-multiarch-v70255 \
             --set persistence.enabled=true \
             --set cFOSmetricExample.enabled=true; then
@@ -1690,10 +1718,47 @@ data:
       set interface "eth0"
     end
     config webfilter profile
-    edit "default"
+    edit "demo1"
         config ftgd-wf
             set options error-allow
         end
+    end
+    config application list
+      edit "demo1"
+        set comment "block http file upload"
+        set extended-log enable
+          config entries
+             edit 1
+                set category 15
+                set application 18123
+                set action block
+             next
+             edit 2
+                set category 15
+                set application 17136
+                set action block
+             next
+          end
+      next
+    end
+    config firewall policy
+        edit 300
+            set utm-status enable
+            set name "policy-name"
+            set srcintf "vxlan0"
+            set dstintf "eth0"
+            set srcaddr "protectedpodtest"
+            set dstaddr "all"
+            set service "ALL"
+            set ssl-ssh-profile "mytest"
+            set av-profile "default"
+            set webfilter-profile "default"
+            set ips-sensor "default"
+            set application-list "demo1"
+            set nat enable
+            set custom-log-fields "pod-label" "nodeip" "nodename" "firewalllabel"
+            set logtraffic all
+        next
     end
   type: partial
 kind: ConfigMap
@@ -1701,7 +1766,7 @@ metadata:
   labels:
     app: fos
     category: config
-  name: webprofileerrorpass
+  name: demo1configmap
 EOF
 kubectl apply -f $filename || failed to apply configmap $filename
 }
@@ -1878,6 +1943,7 @@ case "$1" in
     deleteCFOSandAgent)
         check_license_file
         deleteCFOSandAgent || exit 1
+	#deleteKeda || echo deleteKeda with helm failed
         ;;
     deployDemoPod)
         deploy_demo_pod || exit 1
@@ -1891,6 +1957,7 @@ case "$1" in
         applyCFOSLicense || exit 1 
         deploy_cfos_and_agent "$2" || exit 1
         applyCFOSLicense || exit 1 
+	updatecFOSsignuatre || echo update cFOS signiature failed 
         deploy_demo_pod  || exit 1
         create_apply_cfos_configmap_demo1 || exit 1
 	send_attack_traffic || exit 1 
@@ -1906,19 +1973,24 @@ case "$1" in
         saveVariableForEdit "$2"
 	;;
     sendAttackToClusterIP)
+       updatecFOSsignuatre || echo update cFOS signiature failed
        create_apply_cfos_configmap_demo1 || exit 1
 
 if [ "$#" -le 2 ]; then
     echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile> <source pod label> <source namespace> <target svc name> <target namespace> <ips type> "
     echo "✅ now use default "
 
+    targetsvcname="juiceshop-service"
+    targetnamespace="security"
     # Loop through attack types and send attack traffic
-    for attack in "normal" "log4j" "shellshock" "xss" "lfi" "rfi" "user_agent_malware" "sql_injection" "directory_traversal"; do
-        send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "$attack" "ips.0" || exit 1
+    for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "directory_traversal" "normalfileupload" "segdownload"; do
+    
+    echo ✅ sending attack traffic with label 'app=diag2' in namespace 'backend' to ${targetsvcname} in namespace ${targetnamespace} with payload "$attack"
+        send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0" || echo failed to send traffic 
     done
     
     # Handle the exception for "eicarupload"
-    send_attack_traffic 'app=diag2' 'backend' 'juiceshop-service' 'security' "eicarupload" "virus.0" || exit 1
+    send_attack_traffic 'app=diag2' 'backend' ${targetsvcname} ${targetnamespace} "eicarupload" "virus.0" || exit 1
     
 else
     shift 2
