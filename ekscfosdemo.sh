@@ -228,7 +228,7 @@ set_common_variables() {
 
     deployScaledObjectwithhelmchart=$(get_env_or_default \
 	"deployScaledObjectwithhelmchart" \
-	"true" \
+	"false" \
 	"enable use cfos helm chart to deploy scaledobject")
 }
 
