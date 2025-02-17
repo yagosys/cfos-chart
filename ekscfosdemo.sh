@@ -1,5 +1,179 @@
 #!/bin/bash  -e
 
+function create_internallb_juiceshop() {
+filename="cfosvipjuiceshopinternal.yaml"
+cat << EOF > $filename
+apiVersion: v1
+kind: Service
+metadata:
+  name: cfosvipjuiceshopinternal
+  namespace: default
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"  # Indicates internal LB
+spec:
+  selector:
+    app: firewall
+  ports:
+    - protocol: TCP
+      port: 3000         # The port that the service will expose
+      targetPort: 3000   # The port on the Pod that the service should forward traffic to
+  type: LoadBalancer      # Specify that this service is of type LoadBalancer
+EOF
+kubectl apply -f $filename
+}
+
+function create_externallb_juiceshop() {
+filename="cfosvipjuiceshopinternal.yaml"
+cat << EOF > $filename
+apiVersion: v1
+kind: Service
+metadata:
+  name: cfosvipjuiceshopexternal
+  namespace: default
+  annotations:
+spec:
+  selector:
+    app: firewall
+  ports:
+    - protocol: TCP
+      port: 3000         # The port that the service will expose
+      targetPort: 3000   # The port on the Pod that the service should forward traffic to
+  type: LoadBalancer      # Specify that this service is of type LoadBalancer
+EOF
+kubectl apply -f $filename
+}
+
+
+function create_cfos_headlessvc() {
+filename1="cfosheadless.yaml"
+cat << EOF > $filename1
+apiVersion: v1
+kind: Service
+metadata:  
+  name: cfostest-headless
+spec:
+  clusterIP: None
+  sessionAffinity: ClientIP
+  selector:
+    app: firewall
+  ports:    
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+EOF
+kubectl apply -f $filename1  || echo kubectl apply -f $filename1 failed
+}
+
+function create_juiceshop_vip_configmap() {
+filename2=cfosconfigmapforjuiceshop.yaml
+cfosnamespace="default"
+svcnamespace="security"
+svcname="juiceshop-service"
+
+juiceshopclusterip=$(kubectl get svc $svcname -n $svcnamespace -o json | jq -r .spec.clusterIP)
+juiceshopvipname="juiceshop"
+echo $juiceshopclusterip
+if [[ -z $juiceshopclusterip ]] ; then exit 1; fi
+#juiceshopclusterip="10.96.59.18"
+cat << EOF > $filename2
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfosconfigvipjuiceshop
+  labels:
+      app: fos
+      category: config
+data:
+  type: partial
+  config: |-
+    config firewall vip
+           edit $juiceshopvipname
+            set extip "cfostest-headless.$cfosnamespace.svc.cluster.local"
+            set mappedip $juiceshopclusterip
+            set extintf "eth0"
+            set portforward enable
+            set extport "3000"
+            set mappedport "3000"
+           next
+       end
+EOF
+kubectl apply -f $filename2  -n $cfosnamespace || echo kubectl apply -f $filename2 -n $cfosnamespace failed
+#$curl http://cfostest-headless.default.svc.cluster.local 3000
+}
+
+function create_juiceshopvip_firewallpolicyconfigmap() {
+
+filename3="cfosconfigmapjuiceshopfirewallpolicyforvip.yaml"
+cfosnamespace="default"
+juiceshopvipname="juiceshop"
+
+cat << EOF >$filename3
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfosconfigpolicyforjuiceshopvip
+  labels:
+      app: fos
+      category: config
+data:
+  type: partial
+  config: |-
+    config firewall policy
+           edit 10
+            set name $juiceshopvipname
+            set utm-status enable
+            set srcintf "eth0"
+            set dstintf "eth0"
+            set srcaddr "all"
+            set dstaddr $juiceshopvipname
+            set ssl-ssh-profile "mytest"
+            set av-profile "default"
+            set ips-sensor "default"
+            set webfilter-profile "default"
+            set application-list "demo1"
+            set logtraffic all
+            set nat enable
+           next
+       end
+EOF
+kubectl apply -f $filename3 -n $cfosnamespace || echo kubectl apply -f $filename3 -n $cfosnamespace failed
+}
+
+
+function deleteingressyaml() {
+	kubectl delete -f $filename1
+	kubectl delete -f $filename2
+	kubectl delete -f $filename3
+	
+}
+
+function reapplycfoslicense() {
+        local cfoslicname=${CFOSLICENSEYAMLFILE}
+	kubectl delete -f $cfoslicname || echo failed to delete license file $cfoslicname
+	cfospodname=$(kubectl get pod -l app=firewall -o json | jq -r .items[].metadata.name)
+	kubectl delete po/$cfospodname || echo kubectl delete po/$cfospodname failed 
+	kubectl apply -f $cfoslicname
+}
+
+function webftestegress() {
+	 local pod_label_selector="${1:-app=diag}"
+	 local pod_namespace="${2:-default}"
+	 local url="${3:-https://www.fortiguard.com/wftest/26.html}"
+
+	 echo $pod_namespace
+	 echo $pod_label_selector 
+	 echo kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}'
+	 POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+
+    if [ -z "$POD_NAME" ]; then
+        echo "No pod found with label '$pod_label_selector' in namespace '$pod_namespace'" && exit 1
+    fi
+	echo kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -k $url
+	kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -k $url || echo failed to run
+}
+
+
 function install_latest_aws_cli() {
   # 1. Check system architecture
 if [ "$(uname -o)" = "Darwin" ]; then
@@ -126,6 +300,9 @@ saveVariableForEdit() {
 	echo "#helm Varible"
 	echo "# -----------------"
 	echo "export deployScaledObjectwithhelmchart=\"$deployScaledObjectwithhelmchart\""
+	echo "export deployPVCwithhelmchart=\"$deployPVCwithhelmchart\""
+	echo "export cFOSDeployKind=\"$cFOSDeployKind\""
+	echo "export storageClass=\"$storageClass\""
 
         # Add MYIMAGEREPO only for China region
         if [ "$region" == "china" ]; then
@@ -230,6 +407,19 @@ set_common_variables() {
 	"deployScaledObjectwithhelmchart" \
 	"false" \
 	"enable use cfos helm chart to deploy scaledobject")
+
+    deployPVCwithhelmchart=$(get_env_or_default \
+	"deployPVCwithhelmchart" \
+	"true" \
+	"enable use cfos helm chart to deploy PVC")
+    cFOSDeployKind=$(get_env_or_default \
+	"cFOSDeployKind" \
+	"Deployment" \
+	"Deployment or DaemonSet")
+    storageClass=$(get_env_or_default \
+	"storageClass" \
+	"local-path" \
+	"local-path or gp2")
 }
 
 # Set AWS profile and region for aws china
@@ -687,6 +877,8 @@ spec:
         app: ${appname}
         protectedby: cfos
     spec:
+      nodeSelector:
+        app: "true"
       containers:
         - name: praqma
           image: praqma/network-multitool
@@ -699,6 +891,7 @@ spec:
           securityContext:
             capabilities:
               add: ["NET_ADMIN","SYS_ADMIN","NET_RAW"]
+
 
 ---
 apiVersion: v1
@@ -896,6 +1089,9 @@ deleteCFOSandAgent() {
 
     echo delete webprofileerrorpass configmap 
     kubectl delete cm demo1configmap || echo failed to delete cm demo1configmap
+
+    kubectl delete cm cfosconfigpolicyforjuiceshopvip || echo failed to delete cm 
+    kubectl delete cm cfosconfigvipjuiceshop  || echo failed to delete cm
 
     #kubectl delete deployment diag2 -n backend || echo delete failed 
     #kubectl delete deployment juiceshop -n security || echo delete failed 
@@ -1234,8 +1430,11 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.tag="cni0.1.25fixwrongip" \
 	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set cFOSmetricExample.enabled=true \
-            --set persistence.enabled=true \
+            --set persistence.enabled=$deployPVCwithhelmchart \
             --set image.tag=fos-multiarch-v70255 \
+            --set deployment.kind=$cFOSDeployKind \
+	    --set persistence.storageClass=$storageClass \
+	    --set resources.requests.cpu="300m" \
             --set initContainers.image.repository=${MYIMAGEREPO}/busybox; then
             
             echo "❌ Failed to install/upgrade CFOS"
@@ -1254,7 +1453,10 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.tag="cni0.1.25fixwrongip" \
 	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set image.tag=fos-multiarch-v70255 \
-            --set persistence.enabled=true \
+            --set persistence.enabled=$deployPVCwithhelmchart \
+	    --set resources.requests.cpu="300m" \
+            --set deployment.kind=$cFOSDeployKind \
+	    --set persistence.storageClass=$storageClass \
             --set cFOSmetricExample.enabled=true; then
             
             echo "❌ Failed to install/upgrade CFOS"
@@ -1874,7 +2076,10 @@ print_usage() {
     echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
     echo "  checkPrerequisites                  - Check Whether the program is able to run" 
     echo "  saveconfig                          - Save Default Variable for edit"
+    echo "  sendWebftoExternal                  - Send Web filter test url"
     echo "  sendAttackToClusterIP               - Send attack to clusterip type of svc address"
+    echo "  createIngressDemo                   - createIngressDemo for juiceshop"
+    echo "  createinteralSLBforjuiceship        - createinternalslbforjuiceshop and send ips traffic"
     echo "  installDep                          - install Dependencies -eksctl ."
     echo "Region (optional):"
     echo "  china                      - Use China region settings"
@@ -1961,6 +2166,7 @@ case "$1" in
         deploy_demo_pod  || exit 1
         create_apply_cfos_configmap_demo1 || exit 1
 	send_attack_traffic || exit 1 
+	reapplycfoslicense || exit 1
         ;;
     checkPrerequisites)
         check_prerequisites || exit 1
@@ -1971,6 +2177,45 @@ case "$1" in
 	;;
     saveconfig)
         saveVariableForEdit "$2"
+	;;
+    sendWebftoExternal)
+	 webftestegress  'app=diag2' 'backend'  'https://www.fortiguard.com/wftest/26.html'
+	 webftestegress  'app=diag2' 'backend'  'https://120.wap517.biz'
+	 webftestegress  'app=diag2' 'backend'  'https://www.casino.org'
+	;;
+    createIngressDemo)
+	create_cfos_headlessvc
+        create_juiceshop_vip_configmap
+        create_juiceshopvip_firewallpolicyconfigmap
+         for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
+        echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+        send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+	  done
+	;;
+    createinteralSLBforjuiceship)
+	create_internallb_juiceshop
+	create_externallb_juiceshop
+sleep 60
+internalslbname=$(kubectl get svc cfosvipjuiceshopinternal -o json | jq -r .status.loadBalancer.ingress[].hostname)
+externalslbname=$(kubectl get svc cfosvipjuiceshopexternal -o json | jq -r .status.loadBalancer.ingress[].hostname)
+podname=$(kubectl get pod -l app=diag2 -n backend -o json  | jq -r .items[0].metadata.name)
+echo sending via internal lb
+echo $podname
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$internalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
+
+echo sending via external lb
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
+echo access from internet
+echo curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
+curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
+echo curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
+curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
 	;;
     sendAttackToClusterIP)
        updatecFOSsignuatre || echo update cFOS signiature failed
@@ -1996,6 +2241,7 @@ else
     shift 2
     send_attack_traffic "$@" || exit 1
 fi
+
 
         ;;
     *)
