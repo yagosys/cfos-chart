@@ -1401,6 +1401,7 @@ deployCFOSandAgentChinaAWS() {
     fi
 
     # Get latest version with explicit repository name
+    VERSION="0.1.20" //this is the previous working version 
     VERSION=$(helm search repo cfos/cfos --versions | awk 'NR==2 {print $2}')
     if [ -z "$VERSION" ]; then
         echo "❌ Error: Could not determine CFOS version"
@@ -1427,7 +1428,7 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-            --set routeManager.image.tag="cni0.1.25fixwrongip" \
+            --set routeManager.image.tag="cni0.1.25clusteroute" \
 	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set cFOSmetricExample.enabled=true \
             --set persistence.enabled=$deployPVCwithhelmchart \
@@ -1450,7 +1451,7 @@ deployCFOSandAgentChinaAWS() {
             --set routeManager.image.pullPolicy=Always \
             --set dnsConfig.nameserver="$dnsAddress" \
             --set routeManager.env.DEFAULT_FIREWALL_POLICY=${DEMOCFOSFIREWALLPOLICY} \
-            --set routeManager.image.tag="cni0.1.25fixwrongip" \
+            --set routeManager.image.tag="cni0.1.25clusteroute" \
 	    --set kedaScaling.enabled=$deployScaledObjectwithhelmchart \
             --set image.tag=fos-multiarch-v70255 \
             --set persistence.enabled=$deployPVCwithhelmchart \
