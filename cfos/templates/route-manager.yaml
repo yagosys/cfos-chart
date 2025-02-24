@@ -11,6 +11,12 @@ kind: ClusterRole
 metadata:
   name: cni-pod-reader
 rules:
+- apiGroups:
+  - crd.projectcalico.org
+  resources:
+  - ippools
+  verbs:
+  - list
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list", "watch", "patch"]
