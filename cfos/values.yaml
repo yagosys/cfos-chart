@@ -115,6 +115,7 @@ routeManager:
     VLAN_ID: "100"
     VXLAN_ID: "42"
     ROUTE_DST: "0.0.0.0/1,128.0.0.0/1"
+    CLUSTER_ROUTE_DST: ""
     LOG_LEVEL: "extendedDebug"
     BPF_FS_PATH: "/sys/fs/bpf"  # Added BPF filesystem path
     EBPF_PROGRAM_PATH: "./myapp.bpf.o"
