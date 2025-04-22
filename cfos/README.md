@@ -14,8 +14,9 @@ helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set dnsConfi
 
 ##  deploy cfos without routeManager agent
 
+```bash
 helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos   --set routeManager.enabled=false --set dnsConfig.nameserver=<your kubernetes dns service ip>
-
+```
 
 ## check detail of chart
 
@@ -43,7 +44,7 @@ helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos --set kedaScal
 ```
 
 ## Deploy with custom vxlan port for routeManager agent and other parameters
-## in case use calico CNI with vxlan mode, need change routemanager default vxlan_port to something else like 4444. 
+in case use calico CNI with vxlan mode, need change routemanager default vxlan_port to something else like 4444. 
 
 ```bash
 ROUTE_DST="1.0.0.0/1\,128.0.0.0/1" #traffic to these will be route to cFOS
