@@ -6,6 +6,19 @@ helm repo update
 helm search repo cfos-chart
 ```
 
+## deploy cfos without agent and use nodeSeelector label
+
+the helm chart by default only deploy to node with lable "security=true". 
+
+if your node do not have label "security=true". then label it first or use --set-string to use your own label  
+
+```bash
+helm upgrade --install cfos7210250-deployment-new cfos-chart/cfos \
+  --set routeManager.enabled=false \
+  --set dnsConfig.nameserver=10.144.0.10 \
+  --set-string nodeSelector.security="true" \
+```
+
 ##  deploy cfos and agent
 
 ```bash
