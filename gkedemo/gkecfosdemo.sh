@@ -698,12 +698,6 @@ check_aws_profile() {
 }
 
 function deploy_demo_pod() {
-echo kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml 
-kubectl apply -f ${ALTERNATIVEDOWNLOADURL}/diag.yaml
-kubectl rollout status deployment diag 
-echo sleep 10 
-sleep 10
-check_network_connectivity ${DST_IP_TOCHECK} ${DST_TCP_PORT_TOCHECK}
 create_and_apply_juiceshop_yaml
 create_and_apply_diag2_yaml
 }
@@ -2059,32 +2053,8 @@ delete_cluster() {
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 [command] [region]"
-    echo "Example: Deploy with global aws default profile:  $0 demo default or $0 demo"
-    echo "Example: Deploy with china aws profile:  $0 demo china"
-    echo "Example: Deploy with china aws profile and custom variable:  export DEMOCFOSFIREWALLPOLICY=\"UTM\"; $0 demo china"
-    echo "Commands:"
-    echo "  demo                                - CreateEverythingIncludeEKSCluster" 
-    echo "  createClusterOnly                   - Create EKS cluster without nodegroups"
-    echo "  createClusterWithNodeGroup          - Create EKS cluster with nodegroups"
-    echo "  createNodeGroupOnly                 - Create nodegroups for existing cluster"
-    echo "  deployKeda                          - Deploy KEDA (Helm for global, ECR for China)"
-    echo "  delete_all                          - Delete entire cluster and nodegroups"
-    echo "  deleteCFOSandAgent                  - Delete CFOS, agent and other related"
-    echo "  deployLocalPathProvisioner          - Deploy local-path-provisioner"
-    echo "  deploycFOSAndAgent                  - Deploy cFOS and Agent with demo policy"
-    echo "  createCFOSLicenseConfigmap 		- Create cFOS configmap license yaml file from cfos license file"
     echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
-    echo "  checkPrerequisites                  - Check Whether the program is able to run" 
-    echo "  saveconfig                          - Save Default Variable for edit"
-    echo "  sendWebftoExternal                  - Send Web filter test url"
-    echo "  sendAttackToClusterIP               - Send attack to clusterip type of svc address"
     echo "  createIngressDemo                   - createIngressDemo for juiceshop"
-    echo "  createinteralSLBforjuiceship        - createinternalslbforjuiceshop and send ips traffic"
-    echo "  installDep                          - install Dependencies -eksctl ."
-    echo "Region (optional):"
-    echo "  china                      - Use China region settings"
-    echo "  global                     - Use Global region settings (default)"
     exit 1
 }
 
@@ -2106,86 +2076,9 @@ fi
 # Execute based on command argument
 # Execute based on command argument
 case "$1" in
-    createCFOSLicenseConfigmap)
-       create_license_configmap $2 || exit 1
-        ;;
-    createClusterOnly)
-        create_cluster_only || exit 1
-        ;;
-    createClusterWithNodeGroup)
-        create_cluster_only || exit 1
-        create_nodegroups || exit 1
-        ;;
-    createNodeGroupOnly)
-        create_nodegroups || exit 1
-        ;;
-    deployKeda)
-        deploykeda "$2" || exit 1
-        ;; 
-    deployLocalPathProvisioner)
-    #    if [ "$2" == "china" ]; then
-    #        set_china_aws_variable
-    #    else
-    #        set_global_aws_variable
-    #    fi
-
-        # Check if cluster exists
-        if ! check_eks_cluster; then
-            echo "EKS cluster does not exist. Creating cluster with nodegroups first..."
-            create_cluster_only || exit 1
-            create_nodegroups || exit 1
-            echo "Cluster creation completed. Proceeding with local-path-provisioner deployment..."
-        fi
-
-        # Deploy local-path-provisioner
-        deploy_local_path_provisioner "$2" || exit 1
-        ;;
-    deploycFOSAndAgent)
-       deploy_cfos_and_agent "$2" || exit 1
-       applyCFOSLicense || exit 1
-        ;;
-    delete_all)
-        delete_cluster || exit 1
-	delete_cloudformation_stack || exit 1
-        ;;
-    deleteCFOSandAgent)
-        check_license_file
-        deleteCFOSandAgent || exit 1
-	#deleteKeda || echo deleteKeda with helm failed
-        ;;
     deployDemoPod)
         deploy_demo_pod || exit 1
         ;;
-    demo)
-        check_license_file || exit 1 
-	if ! eksctl get cluster ${CLUSTERNAME} ; then
-        create_cluster_only || return 1
-        create_nodegroups || return 1
-	fi 
-        applyCFOSLicense || exit 1 
-        deploy_cfos_and_agent "$2" || exit 1
-        applyCFOSLicense || exit 1 
-	updatecFOSsignuatre || echo update cFOS signiature failed 
-        deploy_demo_pod  || exit 1
-        create_apply_cfos_configmap_demo1 || exit 1
-	send_attack_traffic || exit 1 
-	reapplycfoslicense || exit 1
-        ;;
-    checkPrerequisites)
-        check_prerequisites || exit 1
-        ;;
-    installDep)
-	upgradeLatestEKSCTL || exit 1
-        install_latest_aws_cli || exit 1
-	;;
-    saveconfig)
-        saveVariableForEdit "$2"
-	;;
-    sendWebftoExternal)
-	 webftestegress  'app=diag2' 'backend'  'https://www.fortiguard.com/wftest/26.html'
-	 webftestegress  'app=diag2' 'backend'  'https://120.wap517.biz'
-	 webftestegress  'app=diag2' 'backend'  'https://www.casino.org'
-	;;
     createIngressDemo)
 	create_cfos_headlessvc
         create_juiceshop_vip_configmap
@@ -2195,58 +2088,6 @@ case "$1" in
         send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
 	  done
 	;;
-    createinteralSLBforjuiceship)
-	create_internallb_juiceshop
-	create_externallb_juiceshop
-sleep 60
-internalslbname=$(kubectl get svc cfosvipjuiceshopinternal -o json | jq -r .status.loadBalancer.ingress[].hostname)
-externalslbname=$(kubectl get svc cfosvipjuiceshopexternal -o json | jq -r .status.loadBalancer.ingress[].hostname)
-podname=$(kubectl get pod -l app=diag2 -n backend -o json  | jq -r .items[0].metadata.name)
-echo sending via internal lb
-echo $podname
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$internalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
-
-echo sending via external lb
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
-echo access from internet
-echo curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
-curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
-echo curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
-curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
-	;;
-    sendAttackToClusterIP)
-       updatecFOSsignuatre || echo update cFOS signiature failed
-       create_apply_cfos_configmap_demo1 || exit 1
-
-if [ "$#" -le 2 ]; then
-    echo " ❌ usage ./ekscfosdemo.sh sendAttackToClusterIP <your aws profile> <source pod label> <source namespace> <target svc name> <target namespace> <ips type> "
-    echo "✅ now use default "
-
-    targetsvcname="juiceshop-service"
-    targetnamespace="security"
-    # Loop through attack types and send attack traffic
-    for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "directory_traversal" "normalfileupload" "segdownload"; do
-    
-    echo ✅ sending attack traffic with label 'app=diag2' in namespace 'backend' to ${targetsvcname} in namespace ${targetnamespace} with payload "$attack"
-        send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0" || echo failed to send traffic 
-    done
-    
-    # Handle the exception for "eicarupload"
-    send_attack_traffic 'app=diag2' 'backend' ${targetsvcname} ${targetnamespace} "eicarupload" "virus.0" || exit 1
-    
-else
-    shift 2
-    send_attack_traffic "$@" || exit 1
-fi
-
-
-        ;;
     *)
         print_usage
         ;;
