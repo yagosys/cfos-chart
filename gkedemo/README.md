@@ -261,3 +261,9 @@ date=2025-04-24 time=00:56:41 eventtime=1745456201 tz="+0000" logid="0419016384"
 ```
 ./gkecfosdemo.sh  createIngressDemo
 ```
+
+### delete cluster
+
+```bash
+gcloud container clusters delete my-first-cluster-1 --zone us-central1-a 
+```
