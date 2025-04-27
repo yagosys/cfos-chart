@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfosconfigvipjuiceshop
+  labels:
+      app: fos
+      category: config
+data:
+  type: partial
+  config: |-
+    config firewall vip
+           edit juiceshop
+            set extip "cfostest-headless.default.svc.cluster.local"
+            set mappedip 10.144.10.73
+            set extintf "eth0"
+            set portforward enable
+            set extport "3000"
+            set mappedport "3000"
+           next
+       end
