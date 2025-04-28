@@ -257,9 +257,9 @@ kubectl exec -it po/cfos7210250-deployment-new-75ddb9dbf4-fjgv8 -c cfos -- tail 
 date=2025-04-24 time=00:56:41 eventtime=1745456201 tz="+0000" logid="0419016384" type="utm" subtype="ips" eventtype="signature" level="alert" severity="critical" srcip=10.140.0.16 dstip=10.144.10.73 srcintf="eth0" dstintf="eth0" sessionid=5 action="dropped" proto=6 service="HTTP" policyid=10 attack="Apache.Log4j.Error.Log.Remote.Code.Execution" srcport=42194 dstport=3000 hostname="cfostest-headless.default.svc.cluster.local" url="/" direction="outgoing" attackid=51006 profile="default" incidentserialno=161480707 msg="apache: Apache.Log4j.Error.Log.Remote.Code.Execution"
 ```
 
-### more test use script
+### full demo with script
 ```
-./gkecfosdemo.sh  createIngressDemo
+./gkecfosdemo.sh  demo
 ```
 
 ### delete cluster
