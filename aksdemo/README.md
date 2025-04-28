@@ -1,7 +1,9 @@
 ## prepare cfos license 
 
-```bash
 copy license configmap file or use ./akscfosdemo.sh createcFOSlicensefile to generate one
+```
+ls cfos_license.yaml 
+cfos_license.yaml
 ```
 
 
