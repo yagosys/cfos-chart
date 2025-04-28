@@ -49,9 +49,11 @@ gcloud container clusters create $gkeClusterName  \
 	--max-unavailable-upgrade 0 \
 	--enable-shielded-nodes \
 	--services-ipv4-cidr $services_ipv4_cidr \
-        --cluster-ipv4-cidr  $cluster_ipv4_cidr
+        --cluster-ipv4-cidr  $cluster_ipv4_cidr || echo cluster exist already
 EOF
 chmod +x $filename
+
+
 ./$filename
 echo done
 echo cluster has podIpv4CidrBlock $(gcloud container clusters describe $gkeClusterName --format="value(nodePools.networkConfig.podIpv4CidrBlock)")
