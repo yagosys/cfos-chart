@@ -837,7 +837,7 @@ run_curl_in_pod() {
     fi
 
     # Run the curl command inside the pod
-    kubectl exec $POD_NAME --namespace "$pod_namespace" -- ip route get ${SERVICEIPV4CIDR%/*} | grep 'vxlan0'  || echo failed to check route 10.96.0.0
+#    kubect exec $POD_NAME --namespace "$pod_namespace" -- ip route get ${SERVICEIPV4CIDR%/*} | grep 'vxlan0'  || echo failed to check route 10.96.0.0
     echo "kubectl exec -it $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
     echo "✅  waiting result"
     kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
@@ -2080,6 +2080,7 @@ case "$1" in
         deploy_demo_pod || exit 1
         ;;
     createIngressDemo)
+	updatecFOSsignuatre
 	create_cfos_headlessvc
         create_juiceshop_vip_configmap
         create_juiceshopvip_firewallpolicyconfigmap
