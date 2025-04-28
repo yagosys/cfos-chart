@@ -1,5 +1,50 @@
 #!/bin/bash  -e
 
+function create_ingress_demo() {
+      cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
+      juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/')
+        svctype="access-proxy"
+        #svctype="static-nat"
+        create_cfos_headlessvc $cfosClusterIPAddress
+        #create_cfos_headlessvc "None"
+        create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype
+        create_juiceshopvip_firewallpolicyconfigmap
+
+         for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
+        echo  ✅a  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+        send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+          done 
+
+}
+
+function send_waf_attack() {
+local podlabel="${1:-app=diag2}"
+local podnamespace="${2:-backend}"
+
+webftestegress  $podlabel $podnamespace 'https://www.fortiguard.com/wftest/26.html'         
+webftestegress  $podlabel $podnamespace  'https://120.wap517.biz'
+webftestegress  $podlabel $podnamespace  'https://www.casino.org'
+
+}
+
+
+function sendattack_to_clusteripsvc() {
+
+    targetsvcname="${1:-juiceshop-service}"
+    targetnamespace="${2:-security}"
+    # Loop through attack types and send attack traffic
+    for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "directory_travers
+al" "normalfileupload" "segdownload"; do
+
+    echo ✅   sending attack traffic with label 'app=diag2' in namespace 'backend' to ${targetsvcname} in namespace ${targetnamespace} with payload "$attack"
+        send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0" || echo failed to send traffic 
+    done
+
+    # Handle the exception for "eicarupload"
+    send_attack_traffic 'app=diag2' 'backend' ${targetsvcname} ${targetnamespace} "eicarupload" "virus.0" || exit 1
+
+} 
+
 function sendattack_to_headlesssvc_cfos() {
 for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" ; do
     echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
@@ -22,22 +67,21 @@ function create_aks_cluster() {
 
 function add_label_to_node() {
 
-node_names=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
+local label1=$1
+local label2=$2  
+
+node_names=$(kubectl get nodes -l $label1 -o jsonpath='{.items[*].metadata.name}')
 
 # Loop through each node name
 for node in $node_names; do
   echo "Labeling node: $node"
 
-  # Assign label app=true
-  kubectl label nodes "$node" app=true --overwrite
-
-  # Assign label security=true
-  kubectl label nodes "$node" security=true --overwrite
+  kubectl label nodes "$node" $label2 --overwrite
 
   echo "Node $node labeled successfully."
 done
 
-echo "All nodes have been labeled with app=true and security=true."
+echo "All nodes with label $label1 assigned label $label2"
 
 }
 
@@ -2177,9 +2221,11 @@ fi
 # Execute based on command argument
 case "$1" in
     demo)
-	CFOSLICENSEYAMLFILE="cfos_license.yaml"
-       create_aks_cluster ||  echo createGkecluster failed  
-       add_label_to_node || echo addlabel 
+      CFOSLICENSEYAMLFILE="cfos_license.yaml"
+      create_aks_cluster ||  echo createGkecluster failed  
+       add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
+       add_label_to_node "agentpool=worker" "security=true" || exit 1
+
       cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
       juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
       deploy_demo_pod $juiceshopClusterIPAddress  || echo deployDemoPod
@@ -2197,12 +2243,16 @@ case "$1" in
       create_juiceshopvip_firewallpolicyconfigmap || echo create_juiceshopvip_firewallpolicyconfigmap
       sleep 5
       sendattack_to_headlesssvc_cfos || echo sendattack_to_headlesssvc_cfos
+      send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit 
+      sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc 
+
        ;;
     createAKScluster)
        create_aks_cluster || exit 1
        ;;
     addlabel)
-       add_label_to_node || exit 1
+       add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
+       add_label_to_node "agentpool=worker" "security=true" || exit 1
         ;;
     deployDemoPod)
 	
@@ -2221,48 +2271,17 @@ case "$1" in
 	updatecFOSsignuatre
 	;;
     createIngressDemo)
-	    cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/') 
-	    juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/')
-	svctype="access-proxy"
-	#svctype="static-nat"
-
-	create_cfos_headlessvc $cfosClusterIPAddress
-	#create_cfos_headlessvc "None"
-        create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype
-        create_juiceshopvip_firewallpolicyconfigmap
-         for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
-        echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-        send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
-	  done
+        create_ingress_demo || echo create_ingress_demo exit
 	;;
     sendAttacktocFOSheadlesssvc)
-    #    for attack in "normal" "eicarupload"; do
-    #        echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-    #       send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
-    #     done
        sendattack_to_headlesssvc_cfos
         ;;
-       sendWebftoExternal)
-         webftestegress  'app=diag2' 'backend'  'https://www.fortiguard.com/wftest/26.html'
-         webftestegress  'app=diag2' 'backend'  'https://120.wap517.biz'
-         webftestegress  'app=diag2' 'backend'  'https://www.casino.org'
+    sendWebftoExternal)
+       send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
         ;;
 
-
     sendAttackToClusterIP)
-
-
-    targetsvcname="juiceshop-service"
-    targetnamespace="security"
-    # Loop through attack types and send attack traffic
-    for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "directory_traversal" "normalfileupload" "segdownload"; do
-
-    echo ✅  sending attack traffic with label 'app=diag2' in namespace 'backend' to ${targetsvcname} in namespace ${targetnamespace} with payload "$attack"
-        send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0" || echo failed to send traffic 
-    done
-
-    # Handle the exception for "eicarupload"
-    send_attack_traffic 'app=diag2' 'backend' ${targetsvcname} ${targetnamespace} "eicarupload" "virus.0" || exit 1
+       sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
 
         ;;
 

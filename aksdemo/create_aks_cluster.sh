@@ -1,5 +1,5 @@
 location="westus"
-resourcegroupname="demofortiwebingresscontroller"
+resourcegroupname="cfosdemowandy"
 
 az group create --location $location --resource-group $resourcegroupname
 
@@ -29,22 +29,23 @@ az aks create \
 
 # --load-balancer-sku standard \
 
-#az aks nodepool add \
-#    --resource-group $resourcegroupname \
-#    --cluster-name ${clustername} \
-#    --os-type Linux \
-#    --node-vm-size $INSTANCETYPE \
-#    --name ubuntu \
-#    --labels nested=true linux=true \
-#    --node-count 1 
+az aks nodepool add \
+    --resource-group $resourcegroupname \
+    --cluster-name ${clustername} \
+    --os-type Linux \
+    --node-vm-size $INSTANCETYPE \
+    --name ubuntu \
+    --labels nested=true linux=true \
+    --node-count 1 
 #
-#az network public-ip create \
-#    --resource-group $resourcegroupname \
-#    --name $PUBLICIPNAME \
-#    --sku Standard \
-#    --allocation-method static
-#
-#az network public-ip show --resource-group $resourcegroupname --name $PUBLICIPNAME --query ipAddress --output tsv
+az network public-ip create \
+    --resource-group $resourcegroupname \
+    --name $PUBLICIPNAME \
+    --sku Standard \
+    --allocation-method static
+
+az network public-ip show --resource-group $resourcegroupname --name $PUBLICIPNAME --query ipAddress --output tsv
+
 #
 CLIENT_ID=$(az aks show --name $clustername --resource-group $resourcegroupname --query identity.principalId -o tsv)
 RG_SCOPE=$(az group show --name $resourcegroupname --query id -o tsv)
