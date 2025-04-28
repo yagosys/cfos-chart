@@ -17,6 +17,7 @@ done
 }
 
 function create_gke_cluster() {
+./00_a_gcloud_env.sh
 ./00_create_network.sh
 ./01_gke.sh
 #02_modifygkevmipforwarding.sh.shell.sh 
@@ -106,6 +107,7 @@ kubectl apply -f $filename
 
 
 function create_cfos_headlessvc() {
+local cfosClusterIPAddress=$1
 filename1="cfosheadless.yaml"
 cat << EOF > $filename1
 apiVersion: v1
@@ -113,30 +115,32 @@ kind: Service
 metadata:  
   name: cfostest-headless
 spec:
-  clusterIP: None
+  clusterIP: $cfosClusterIPAddress
   sessionAffinity: ClientIP
   selector:
     app: firewall
   ports:    
     - protocol: TCP
-      port: 8080
-      targetPort: 8080
+      port: 3000
+      targetPort: 3000
 
 EOF
 kubectl apply -f $filename1  || echo kubectl apply -f $filename1 failed
 }
 
 function create_juiceshop_vip_configmap() {
+	local juiceshopclusterip=$1
+	local svctype=$2
 filename2=cfosconfigmapforjuiceshop.yaml
 cfosnamespace="default"
 svcnamespace="security"
 svcname="juiceshop-service"
-
+svctype="${2:-access-proxy}"
+if [[ -z $juiceshopclusterip ]]; then
 juiceshopclusterip=$(kubectl get svc $svcname -n $svcnamespace -o json | jq -r .spec.clusterIP)
+fi 
 juiceshopvipname="juiceshop"
 echo $juiceshopclusterip
-if [[ -z $juiceshopclusterip ]] ; then exit 1; fi
-#juiceshopclusterip="10.96.59.18"
 cat << EOF > $filename2
 apiVersion: v1
 kind: ConfigMap
@@ -151,6 +155,8 @@ data:
     config firewall vip
            edit $juiceshopvipname
             set extip "cfostest-headless.$cfosnamespace.svc.cluster.local"
+            set type $svctype
+            set service "ALL"
             set mappedip $juiceshopclusterip
             set extintf "eth0"
             set portforward enable
@@ -159,6 +165,7 @@ data:
            next
        end
 EOF
+
 kubectl apply -f $filename2  -n $cfosnamespace || echo kubectl apply -f $filename2 -n $cfosnamespace failed
 #$curl http://cfostest-headless.default.svc.cluster.local 3000
 }
@@ -782,7 +789,8 @@ check_aws_profile() {
 }
 
 function deploy_demo_pod() {
-create_and_apply_juiceshop_yaml
+	local juiceshopClusterIPAddress=$1
+create_and_apply_juiceshop_yaml $juiceshopClusterIPAddress
 create_and_apply_diag2_yaml
 }
 
@@ -999,6 +1007,7 @@ EOF
 function create_and_apply_juiceshop_yaml() {
     # Define the YAML file path
     YAML_FILE="juiceshop_deployment.yaml"
+    local juiceshopClusterIPAddress=$1
 
     # Create the YAML content and save it to the file
     cat <<EOF > $YAML_FILE
@@ -1036,6 +1045,7 @@ metadata:
   name: juiceshop-service
   namespace: security
 spec:
+  clusterIP: $juiceshopClusterIPAddress
   selector:
     app: juiceshop
   ports:
@@ -2126,7 +2136,7 @@ print_usage() {
     echo "  createcFOSlicensefile               - create cFOS licenseconfigmap file from .lic file" 
     echo "  deploycFOS                          - Deploy CFOS with helm chart"
     echo "  createIngressDemo                   - createIngressDemo for juiceshop"
-    echo "  sendVirusAttacktocFOSheadlesssvc         - send attack to cFOSheadlesssvc" 
+    echo "  sendAttacktocFOSheadlesssvc         - send attack to cFOSheadlesssvc" 
     exit 1
 }
 
@@ -2151,13 +2161,22 @@ case "$1" in
 	CFOSLICENSEYAMLFILE="cfos_license.yaml"
        create_gke_cluster ||  echo createGkecluster failed  
        add_label_to_node || echo addlabel 
-      deploy_demo_pod || echo deployDemoPod
+      cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
+      juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
+      deploy_demo_pod $juiceshopClusterIPAddress  || echo deployDemoPod
       applyCFOSLicense  || echo applyCFOSLicense
       deploy_cfos  || echo deploycFOS
       updatecFOSsignuatre  || echo updatecFOSsignuatre
-      create_cfos_headlessvc || echo createIngressDemo
-      create_juiceshop_vip_configmap || echo create_juiceshop_vip_configmap
+
+      create_cfos_headlessvc $cfosClusterIPAddress  || echo createIngressDemo
+      #create_cfos_headlessvc "None"  || echo createIngressDemo
+      #svctype="static-nat"
+      svctype="access-proxy"
+
+      create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype || echo create_juiceshop_vip_configmap $juiceshopClusterIPAddress
+
       create_juiceshopvip_firewallpolicyconfigmap || echo create_juiceshopvip_firewallpolicyconfigmap
+      sleep 5
       sendattack_to_headlesssvc_cfos || echo sendattack_to_headlesssvc_cfos
        ;;
     createGkecluster)
@@ -2167,7 +2186,9 @@ case "$1" in
        add_label_to_node || exit 1
         ;;
     deployDemoPod)
-        deploy_demo_pod || exit 1
+	
+	juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
+        deploy_demo_pod $juiceshopClusterIPAddress || exit 1
         ;;
     createcFOSlicensefile)
         create_license_configmap || exit 1
@@ -2181,19 +2202,26 @@ case "$1" in
 	updatecFOSsignuatre
 	;;
     createIngressDemo)
-	create_cfos_headlessvc
-        create_juiceshop_vip_configmap
+	    cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/') 
+	    juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/')
+	svctype="access-proxy"
+	#svctype="static-nat"
+
+	create_cfos_headlessvc $cfosClusterIPAddress
+	#create_cfos_headlessvc "None"
+        create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype
         create_juiceshopvip_firewallpolicyconfigmap
          for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
         echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
         send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
 	  done
 	;;
-    sendVirusAttacktocFOSheadlesssvc)
-        for attack in "normal" "eicarupload"; do
-            echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-           send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
-         done
+    sendAttacktocFOSheadlesssvc)
+    #    for attack in "normal" "eicarupload"; do
+    #        echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+    #       send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+    #     done
+       sendattack_to_headlesssvc_cfos
         ;;
     *)    
         print_usage
