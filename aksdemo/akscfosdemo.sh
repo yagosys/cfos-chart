@@ -2184,7 +2184,7 @@ case "$1" in
       juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
       deploy_demo_pod $juiceshopClusterIPAddress  || echo deployDemoPod
       applyCFOSLicense  || echo applyCFOSLicense
-      deploycFOSwithAgent  || echo deploycFOSwithAgent
+      deploy_cfos_with_agent || echo deploy_cfos_with_agent
       updatecFOSsignuatre  || echo updatecFOSsignuatre
 
       create_cfos_headlessvc $cfosClusterIPAddress  || echo createIngressDemo
