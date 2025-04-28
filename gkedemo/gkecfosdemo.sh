@@ -1,5 +1,66 @@
 #!/bin/bash  -e
 
+function sendattack_to_headlesssvc_cfos() {
+for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" ; do
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+done
+
+for attack in  "normalfileupload" "segdownload"; do
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+done
+for attack in "eicarupload"; do
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+done
+}
+
+function create_gke_cluster() {
+./00_create_network.sh
+./01_gke.sh
+#02_modifygkevmipforwarding.sh.shell.sh 
+}
+
+function add_label_to_node() {
+
+node_names=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
+
+# Loop through each node name
+for node in $node_names; do
+  echo "Labeling node: $node"
+
+  # Assign label app=true
+  kubectl label nodes "$node" app=true --overwrite
+
+  # Assign label security=true
+  kubectl label nodes "$node" security=true --overwrite
+
+  echo "Node $node labeled successfully."
+done
+
+echo "All nodes have been labeled with app=true and security=true."
+
+}
+
+function deploy_cfos() {
+
+deploymentname="cfos7210250-deployment-new"
+
+kube_dns_ip=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}')
+
+helm repo add cfos-chart https://yagosys.github.io/cfos-chart
+helm repo update
+helm search repo cfos-chart
+helm upgrade --install $deploymentname cfos-chart/cfos \
+  --set routeManager.enabled=false \
+  --set dnsConfig.nameserver=$kube_dns_ip \
+  --set-string nodeSelector.security="true" \
+  --set appArmor.enabled=true
+
+kubectl rollout status deployment $deploymentname
+}
+
 function create_internallb_juiceshop() {
 filename="cfosvipjuiceshopinternal.yaml"
 cat << EOF > $filename
@@ -119,6 +180,29 @@ metadata:
 data:
   type: partial
   config: |-
+    config firewall ssl-ssh-profile
+        edit "mytest"
+           set server-cert "Device"
+        next
+    end
+    config application list
+      edit "demo1"
+        set comment "block http file upload"
+        set extended-log enable
+          config entries
+             edit 1
+                set category 15
+                set application 18123
+                set action block
+             next
+             edit 2
+                set category 15
+                set application 17136
+                set action block
+             next
+          end
+      next
+    end
     config firewall policy
            edit 10
             set name $juiceshopvipname
@@ -1938,25 +2022,6 @@ data:
           end
       next
     end
-    config firewall policy
-        edit 300
-            set utm-status enable
-            set name "policy-name"
-            set srcintf "vxlan0"
-            set dstintf "eth0"
-            set srcaddr "protectedpodtest"
-            set dstaddr "all"
-            set service "ALL"
-            set ssl-ssh-profile "mytest"
-            set av-profile "default"
-            set webfilter-profile "default"
-            set ips-sensor "default"
-            set application-list "demo1"
-            set nat enable
-            set custom-log-fields "pod-label" "nodeip" "nodename" "firewalllabel"
-            set logtraffic all
-        next
-    end
   type: partial
 kind: ConfigMap
 metadata:
@@ -2053,8 +2118,15 @@ delete_cluster() {
 
 # Function to print usage
 print_usage() {
+    echo "  demo                                - demo"
+    echo "  createGkecluster                    - create GKE cluster"
+    echo "  addlabel                            - add node app=true and security=true to each node"
     echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
+    echo "  applyCFOSLicense                    - Apply cFOS licene file cfos_license.yaml"  
+    echo "  createcFOSlicensefile               - create cFOS licenseconfigmap file from .lic file" 
+    echo "  deploycFOS                          - Deploy CFOS with helm chart"
     echo "  createIngressDemo                   - createIngressDemo for juiceshop"
+    echo "  sendVirusAttacktocFOSheadlesssvc         - send attack to cFOSheadlesssvc" 
     exit 1
 }
 
@@ -2074,13 +2146,41 @@ else
 fi
 
 # Execute based on command argument
-# Execute based on command argument
 case "$1" in
+    demo)
+	CFOSLICENSEYAMLFILE="cfos_license.yaml"
+       create_gke_cluster ||  echo createGkecluster failed  
+       add_label_to_node || echo addlabel 
+      deploy_demo_pod || echo deployDemoPod
+      applyCFOSLicense  || echo applyCFOSLicense
+      deploy_cfos  || echo deploycFOS
+      updatecFOSsignuatre  || echo updatecFOSsignuatre
+      create_cfos_headlessvc || echo createIngressDemo
+      create_juiceshop_vip_configmap || echo create_juiceshop_vip_configmap
+      create_juiceshopvip_firewallpolicyconfigmap || echo create_juiceshopvip_firewallpolicyconfigmap
+      sendattack_to_headlesssvc_cfos || echo sendattack_to_headlesssvc_cfos
+       ;;
+    createGkecluster)
+       create_gke_cluster || exit 1
+       ;;
+    addlabel)
+       add_label_to_node || exit 1
+        ;;
     deployDemoPod)
         deploy_demo_pod || exit 1
         ;;
-    createIngressDemo)
+    createcFOSlicensefile)
+        create_license_configmap || exit 1
+	;;
+    applyCFOSLicense)
+	CFOSLICENSEYAMLFILE="cfos_license.yaml"
+	applyCFOSLicense || exit 1 
+	;;
+    deploycFOS)
+	deploy_cfos || exit 1
 	updatecFOSsignuatre
+	;;
+    createIngressDemo)
 	create_cfos_headlessvc
         create_juiceshop_vip_configmap
         create_juiceshopvip_firewallpolicyconfigmap
@@ -2089,7 +2189,13 @@ case "$1" in
         send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
 	  done
 	;;
-    *)
+    sendVirusAttacktocFOSheadlesssvc)
+        for attack in "normal" "eicarupload"; do
+            echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
+           send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+         done
+        ;;
+    *)    
         print_usage
         ;;
 esac
