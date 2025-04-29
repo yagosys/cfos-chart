@@ -1,5 +1,101 @@
 #!/bin/bash  -e
 
+function demo_aks() {
+
+create_aks_cluster "westus" "cfosdemowandy" || echo create_aks_cluster failed 
+
+add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
+add_label_to_node "agentpool=worker" "security=true" || exit 1
+
+CFOSLICENSEYAMLFILE="cfos_license.yaml"
+applyCFOSLicense || exit 1
+
+deploy_cfos_with_agent "cfos7210250-deployment-new" || exit 1
+updatecFOSsignuatre
+
+create_ingress_demo || echo create_ingress_demo exit
+
+create_internallb_juiceshop_new "aks"
+kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' --timeout=5m service/cfosvipjuiceshopinternal
+
+create_externallb_juiceshop "service.beta.kubernetes.io/azure-dns-label-name: cfostestjuiceshop"
+
+kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' --timeout=5m service/cfosvipjuiceshopexternal
+
+#cfostestjuiceshop.westus.cloudapp.azure.com
+
+        check_cFOS_log "app=firewall" "traffic.0"
+        check_cFOS_log "app=firewall" "ips.0"
+        check_cFOS_log "app=firewall" "virus.0"
+        check_cFOS_log "app=firewall" "app.0"
+        check_cFOS_log "app=firewall" "webf.0"
+
+sendattack_to_headlesssvc_cfos 
+send_traffic_to_lb "app=diag2" "backend" "ip" 
+
+
+sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
+ 
+send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
+        check_cFOS_log "app=firewall" "traffic.0"  
+        check_cFOS_log "app=firewall" "ips.0" 
+        check_cFOS_log "app=firewall" "virus.0" 
+        check_cFOS_log "app=firewall" "app.0" 
+        check_cFOS_log "app=firewall" "webf.0" 
+
+}
+
+runcli() {
+  local NC='\033[0m'
+  local color_code="" # Default: no specific color code
+
+  local color_name_upper
+  color_name_upper=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+
+  case "$color_name_upper" in
+    GREEN)   color_code='\033[0;32m' ;;
+    YELLOW)  color_code='\033[0;33m' ;;
+    RED)     color_code='\033[0;31m' ;;
+    BLUE)    color_code='\033[0;34m' ;;
+    MAGENTA) color_code='\033[0;35m' ;;
+    CYAN)    color_code='\033[0;36m' ;;
+    *)
+      # Invalid color name provided
+      echo "Warning: Invalid color '$1'. Using default terminal color." >&2
+      # color_code remains empty
+      ;;
+  esac
+
+  shift
+
+  if [[ -n "$color_code" ]]; then
+    printf "${color_code}"
+  fi
+
+  printf "Executing:" # Print prefix
+  printf " %s" "$@"  # Print the command and all its arguments (which are now in "$@")
+
+  printf "${NC}\n"  # Always reset color (harmless if no color was set)
+
+  "$@"
+  local exit_status=$? # Capture exit status immediately
+
+  return $exit_status
+}
+
+myaz() {
+  local GREEN='\033[0;32m'
+  local NC='\033[0m' # No Color
+  printf "${GREEN}Executing: az"
+  printf " %s" "$@"
+  printf "${NC}\n"
+  az "$@"
+  local exit_status=$?
+  return $exit_status
+}
+
+
+
 function send_traffic_to_lb() {
 local podlabel="${1:-app=diag2}"
 local podnamespace="${2:-backend}"
@@ -10,37 +106,34 @@ podname=$(kubectl get pod -l $podlabel -n $podnamespace -o json  | jq -r .items[
 echo sending via internal lb
 echo $podname
 echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$internalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
+runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
 echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
+runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
 
 echo sending via external lb
 echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
+runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
 echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000
-kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
+runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
 echo access from internet
 echo curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
-curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
+runcli GREEN curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
 echo curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
-curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
+runcli GREEN curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
 } 
 
 function create_ingress_demo() {
+
       cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
       juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/')
+        deploy_demo_pod $juiceshopClusterIPAddress || exit 1
+
         svctype="access-proxy"
         #svctype="static-nat"
         create_cfos_headlessvc $cfosClusterIPAddress
         #create_cfos_headlessvc "None"
         create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype
         create_juiceshopvip_firewallpolicyconfigmap
-
-         for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
-        echo  ✅a  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
-        send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
-          done 
-
 }
 
 function send_waf_attack() {
@@ -88,7 +181,48 @@ done
 }
 
 function create_aks_cluster() {
-./create_aks_cluster.sh
+local location="${1:-westus}"
+local resourcegroupname="${2:-cfosdemowandy}"
+
+myaz group create --location $location --resource-group $resourcegroupname
+
+[ ! -f ~/.ssh/id_rsa ] && ssh-keygen -q -N "" -f ~/.ssh/id_rsa
+
+clustername=$(whoami)-aks-cluster
+INSTANCETYPE="Standard_D2s_v4" #2vcpu ,8G memory
+
+myaz aks create \
+    --resource-group $resourcegroupname \
+    --name ${clustername} \
+    --node-count 1 \
+    --enable-addons monitoring \
+    --node-vm-size $INSTANCETYPE \
+    --vm-set-type VirtualMachineScaleSets \
+    --network-plugin azure \
+    --service-cidr  10.96.0.0/16 \
+    --dns-service-ip 10.96.0.10 \
+    --enable-node-public-ip \
+    --nodepool-name worker \
+    --nodepool-labels nested=true linux=true
+
+myaz aks nodepool add \
+    --resource-group $resourcegroupname \
+    --cluster-name ${clustername} \
+    --os-type Linux \
+    --node-vm-size $INSTANCETYPE \
+    --name ubuntu \
+    --labels nested=true linux=true \
+    --node-count 1 
+
+CLIENT_ID=$(az aks show --name $clustername --resource-group $resourcegroupname --query identity.principalId -o tsv)
+RG_SCOPE=$(az group show --name $resourcegroupname --query id -o tsv)
+az role assignment create \
+    --assignee ${CLIENT_ID} \
+    --role "Network Contributor" \
+    --scope ${RG_SCOPE}
+
+az aks get-credentials -g  $resourcegroupname -n ${clustername} --overwrite-existing
+kubectl get node 
 }
 
 function add_label_to_node() {
@@ -130,7 +264,7 @@ kubectl rollout status deployment $deploymentname
 
 function deploy_cfos_with_agent() {
     
-deploymentname="cfos7210250-deployment-new"
+local deploymentname="${1:-cfos7210250-deployment-new}"
       
 kube_dns_ip=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}')
 #CLUSTER_ROUTE_DST="10.96.0.253/32\,10.96.0.0/24"
@@ -138,7 +272,7 @@ CLUSTER_ROUTE_DST="10.96.0.253/32\,10.224.0.0/16"
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
 helm repo update
 helm search repo cfos-chart
-helm upgrade --install $deploymentname cfos-chart/cfos \
+runcli GREEN helm upgrade --install $deploymentname cfos-chart/cfos \
   --set routeManager.enabled=true \
   --set dnsConfig.nameserver=$kube_dns_ip \
   --set-string nodeSelector.security="true" \
@@ -146,7 +280,7 @@ helm upgrade --install $deploymentname cfos-chart/cfos \
   --set routeManager.image.tag=cni0.1.25clusteroute \
   --set appArmor.enabled=true
 
-kubectl rollout status deployment $deploymentname
+runcli YELLOW kubectl rollout status deployment $deploymentname
 }
 
 
@@ -194,7 +328,7 @@ spec:
   type: LoadBalancer    # Specify that this service is of type LoadBalancer
   sessionAffinity: ClientIP
 EOF
-  kubectl apply -f "$filename"
+runcli GREEN  kubectl apply -f "$filename"
 }
 
 function create_internallb_juiceshop() {
@@ -217,7 +351,7 @@ spec:
   type: LoadBalancer      # Specify that this service is of type LoadBalancer
   sessionAffinity: ClientIP
 EOF
-kubectl apply -f $filename
+runcli GREEN kubectl apply -f $filename
 }
 
 function create_externallb_juiceshop() {
@@ -241,7 +375,7 @@ spec:
   type: LoadBalancer      # Specify that this service is of type LoadBalancer
   sessionAffinity: ClientIP
 EOF
-kubectl apply -f $filename
+runcli GREEN kubectl apply -f $filename
 }
 
 
@@ -264,7 +398,7 @@ spec:
       targetPort: 3000
 
 EOF
-kubectl apply -f $filename1  || echo kubectl apply -f $filename1 failed
+runcli GREEN kubectl apply -f $filename1  || echo kubectl apply -f $filename1 failed
 }
 
 function create_juiceshop_vip_configmap() {
@@ -305,7 +439,7 @@ data:
        end
 EOF
 
-kubectl apply -f $filename2  -n $cfosnamespace || echo kubectl apply -f $filename2 -n $cfosnamespace failed
+runcli GREEN kubectl apply -f $filename2  -n $cfosnamespace || echo kubectl apply -f $filename2 -n $cfosnamespace failed
 #$curl http://cfostest-vip-juiceshop.default.svc.cluster.local 3000
 }
 
@@ -367,7 +501,7 @@ data:
            next
        end
 EOF
-kubectl apply -f $filename3 -n $cfosnamespace || echo kubectl apply -f $filename3 -n $cfosnamespace failed
+runcli GREEN kubectl apply -f $filename3 -n $cfosnamespace || echo kubectl apply -f $filename3 -n $cfosnamespace failed
 }
 
 
@@ -928,7 +1062,7 @@ check_aws_profile() {
 }
 
 function deploy_demo_pod() {
-	local juiceshopClusterIPAddress=$1
+local juiceshopClusterIPAddress=$1
 create_and_apply_juiceshop_yaml $juiceshopClusterIPAddress
 create_and_apply_diag2_yaml
 }
@@ -943,6 +1077,15 @@ function updatecFOSsignuatre()
     local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
    echo update $cfos_pod_name signiature
    if ! kubectl exec -it po/$cfos_pod_name  -- update ; then echo update failed; fi
+}
+
+function check_cFOS_log() {
+local label="${1:-app=firewall}" 
+local logfile_name="${2:-ips.0}"
+local number="${3:-1}"
+local cfos_pod_name=$(kubectl get pods -l $label -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
+
+runcli RED kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -$number /var/log/log/${logfile_name} 
 }
 
 function test_diag2() {
@@ -1044,7 +1187,7 @@ esac
 
     run_curl_in_pod "$payload" "$service_address"
     echo "kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}"
-    kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}
+    runcli RED kubectl exec -it po/${cfos_pod_name} -c cfos -- tail -n -1 /var/log/log/${logfile_name}
 
 }
 
@@ -1071,7 +1214,7 @@ run_curl_in_pod() {
 #    kubect exec $POD_NAME --namespace "$pod_namespace" -- ip route get ${SERVICEIPV4CIDR%/*} | grep 'vxlan0'  || echo failed to check route 10.96.0.0
     echo "kubectl exec -it $POD_NAME --namespace $pod_namespace -- bash -c \"$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC\""
     echo "✅  waiting result"
-    kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
+    runcli GREEN kubectl exec $POD_NAME --namespace "$pod_namespace" -- bash -c "$LOCAL_CURL_COMMAND $JUICE_SHOP_SVC"
     sleep 2
 }
 
@@ -1135,10 +1278,10 @@ spec:
 EOF
 
     # Apply the YAML file to Kubernetes
-    kubectl apply -f $YAML_FILE
+    runcli GREEN kubectl apply -f $YAML_FILE
 
     # Wait for the deployment to be ready
-    kubectl rollout status deployment/${appname} -n ${namespacename} --timeout=300s
+    runcli YELLOW kubectl rollout status deployment/${appname} -n ${namespacename} --timeout=300s
 
     echo "diag2 deployment with clusterip svc  in namespace ${namespacename} is ready."
 }
@@ -1194,10 +1337,10 @@ spec:
 EOF
 
     # Apply the YAML file to Kubernetes
-    kubectl apply -f $YAML_FILE
+    runcli GREEN kubectl apply -f $YAML_FILE
 
     # Wait for the deployment to be ready
-    kubectl rollout status deployment/juiceshop -n security --timeout=300s
+    runcli YELLOW kubectl rollout status deployment/juiceshop -n security --timeout=300s
 
     echo "JuiceShop deployment is ready."
 }
@@ -1251,6 +1394,7 @@ deleteKeda() {
 }
 
 deleteCFOSandAgent() {
+local deploymentname="${1:-cfos7210250-deployment-new}"
     echo "Starting deletion of CFOS and related components..."
 
     # Delete route-manager daemonset first to allow proper cleanup
@@ -1270,7 +1414,7 @@ deleteCFOSandAgent() {
     fi
 
     # Delete CFOS helm release
-    local helm_release=$(helm list | grep cfos7210250-deployment-new | awk '{print $1}')
+    local helm_release=$(helm list | grep $deploymentname | awk '{print $1}')
     if [ ! -z "$helm_release" ]; then
         echo "Uninstalling CFOS helm release: $helm_release"
         helm uninstall "$helm_release"
@@ -1279,7 +1423,6 @@ deleteCFOSandAgent() {
     fi
 
     # Delete components if yaml exists
-#    local files=("components.yaml" "local-path-storage.yaml" "keda-2.12.1.yaml")
     local files=("components.yaml" "local-path-storage.yaml" )
     
     for file in "${files[@]}"; do
@@ -1310,9 +1453,15 @@ deleteCFOSandAgent() {
         fi
     done
 
-    echo delete fos-license configmap 
+runcli GREEN kubectl delete svc cfosvipjuiceshopinternal || echo delete failed
+runcli GREEN kubectl delete svc cfosvipjuiceshopexternal || echo delete failed 
+runcli GREEN kubectl delete svc cfostest-vip-juiceshop || echo delete failed
+runcli GREEN kubectl delete svc diag2-service -n backend  || echo delete failed 
+runcli GREEN kubectl delete svc juiceshop-service -n backend || echo delete failed
 
-    kubectl delete cm fos-license  || echo failed to delete cm fos-license
+#    echo delete fos-license configmap 
+
+#    kubectl delete cm fos-license  || echo failed to delete cm fos-license
 
     echo delete webprofileerrorpass configmap 
     kubectl delete cm demo1configmap || echo failed to delete cm demo1configmap
@@ -1320,8 +1469,8 @@ deleteCFOSandAgent() {
     kubectl delete cm cfosconfigpolicyforjuiceshopvip || echo failed to delete cm 
     kubectl delete cm cfosconfigvipjuiceshop  || echo failed to delete cm
 
-    #kubectl delete deployment diag2 -n backend || echo delete failed 
-    #kubectl delete deployment juiceshop -n security || echo delete failed 
+    kubectl delete deployment diag2 -n backend || echo delete failed 
+    kubectl delete deployment juiceshop -n security || echo delete failed 
 
     echo "Cleanup completed"
 
@@ -2270,7 +2419,6 @@ print_usage() {
     echo "  demo                                - demo"
     echo "  createAKScluster                    - create GKE cluster"
     echo "  addlabel                            - add node app=true and security=true to each node"
-    echo "  deployDemoPod                       - Deploy protected demo application pod and check connectivity"
     echo "  applyCFOSLicense                    - Apply cFOS licene file cfos_license.yaml"  
     echo "  createcFOSlicensefile               - create cFOS licenseconfigmap file from .lic file" 
     echo "  deploycFOSwithAgent                 - Deploy CFOS and vxlan agent with helm chart"
@@ -2280,6 +2428,8 @@ print_usage() {
     echo "  sendAttackToClusterIP               - send attack traffic to clusterip svc for egress security test"
     echo "  createinteralSLBforjuiceship        - createinternalslbforjuiceshop and send ips traffic"  
     echo "  sendTrafficToLB                     - send attack traffic to both internal and external lb for ingress security test"
+    echo "  checkCFOSLog                        - check cFOS log, policy10 is ingress policy, policy300 is egress policy"
+   echo  " deleteCFOSandAgent                   - deleteCFOSandAgent" 
     exit 1
 }
 
@@ -2301,41 +2451,16 @@ fi
 # Execute based on command argument
 case "$1" in
     demo)
-      CFOSLICENSEYAMLFILE="cfos_license.yaml"
-       create_aks_cluster ||  echo createGkecluster failed  
-       add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
-       add_label_to_node "agentpool=worker" "security=true" || exit 1
-
-      cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
-      juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
-      deploy_demo_pod $juiceshopClusterIPAddress  || echo deployDemoPod
-      applyCFOSLicense  || echo applyCFOSLicense
-      deploy_cfos_with_agent || echo deploy_cfos_with_agent
-      updatecFOSsignuatre  || echo updatecFOSsignuatre
-
-      create_cfos_headlessvc $cfosClusterIPAddress  || echo createIngressDemo
-      #create_cfos_headlessvc "None"  || echo createIngressDemo
-      #svctype="static-nat"
-      svctype="access-proxy"
-
-      create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype || echo create_juiceshop_vip_configmap $juiceshopClusterIPAddress
-
-      create_juiceshopvip_firewallpolicyconfigmap || echo create_juiceshopvip_firewallpolicyconfigmap
-      sleep 5
-      sendattack_to_headlesssvc_cfos || echo sendattack_to_headlesssvc_cfos
-      send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit 
-      sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc 
-
+      demo_aks
        ;;
     createAKScluster)
-       create_aks_cluster || exit 1
+       create_aks_cluster "westus" "cfosdemowandy" || echo create_aks_cluster failed 
        ;;
     addlabel)
        add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
        add_label_to_node "agentpool=worker" "security=true" || exit 1
         ;;
     deployDemoPod)
-	
 	juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/') 
         deploy_demo_pod $juiceshopClusterIPAddress || exit 1
         ;;
@@ -2347,7 +2472,7 @@ case "$1" in
 	applyCFOSLicense || exit 1 
 	;;
     deploycFOSwithAgent)
-	deploy_cfos_with_agent || exit 1
+	deploy_cfos_with_agent "cfos7210250-deployment-new" || exit 1
 	updatecFOSsignuatre
 	;;
     createIngressDemo)
@@ -2359,7 +2484,6 @@ case "$1" in
     sendWebftoExternal)
        send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
         ;;
-
     sendAttackToClusterIP)
        sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
         ;;
@@ -2370,7 +2494,17 @@ case "$1" in
         ;; 
     sendTrafficToLB)
         send_traffic_to_lb "app=diag2" "backend" "ip"
+        ;;
+    checkCFOSLog)
+        check_cFOS_log "app=firewall" "traffic.0" 3
+        check_cFOS_log "app=firewall" "ips.0" 3
+        check_cFOS_log "app=firewall" "virus.0" 3
+        check_cFOS_log "app=firewall" "app.0" 3
+        check_cFOS_log "app=firewall" "webf.0" 3
         ;; 
+    deleteCFOSandAgent)
+       deleteCFOSandAgent "cfos7210250-deployment-new" 
+       ;;
     *)    
         print_usage
         ;;
