@@ -1,5 +1,31 @@
 #!/bin/bash  -e
 
+function send_traffic_to_lb() {
+local podlabel="${1:-app=diag2}"
+local podnamespace="${2:-backend}"
+local ingresstype="${3:-hostname}"
+internalslbname=$(kubectl get svc cfosvipjuiceshopinternal -o json | jq -r .status.loadBalancer.ingress[].$ingresstype)
+externalslbname=$(kubectl get svc cfosvipjuiceshopexternal -o json | jq -r .status.loadBalancer.ingress[].$ingresstype)
+podname=$(kubectl get pod -l $podlabel -n $podnamespace -o json  | jq -r .items[0].metadata.name)
+echo sending via internal lb
+echo $podname
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$internalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
+
+echo sending via external lb
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
+echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000
+kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
+echo access from internet
+echo curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
+curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
+echo curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
+curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
+} 
+
 function create_ingress_demo() {
       cfosClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.253/')
       juiceshopClusterIPAddress=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}' | cut -d'.' -f1-3 | sed 's/$/.252/')
@@ -11,8 +37,8 @@ function create_ingress_demo() {
         create_juiceshopvip_firewallpolicyconfigmap
 
          for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload"; do
-        echo  ✅a  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-        send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+        echo  ✅a  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
+        send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
           done 
 
 }
@@ -47,17 +73,17 @@ al" "normalfileupload" "segdownload"; do
 
 function sendattack_to_headlesssvc_cfos() {
 for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" ; do
-    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
 done
 
 for attack in  "normalfileupload" "segdownload"; do
-    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
 done
 for attack in "eicarupload"; do
-    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" 
-    send_attack_traffic 'app=diag2' 'backend' 'cfostest-headless' 'default' $attack "ips.0" || exit 1
+    echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
+    send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
 done
 }
 
@@ -123,6 +149,54 @@ helm upgrade --install $deploymentname cfos-chart/cfos \
 kubectl rollout status deployment $deploymentname
 }
 
+
+function create_internallb_juiceshop_new() {
+  local cluster_type="$1"
+  local filename="cfosvipjuiceshopinternal.yaml"
+  local lb_annotation=""
+
+  case "$cluster_type" in
+    "eks")
+      lb_annotation='service.beta.kubernetes.io/aws-load-balancer-internal: "true"'
+      ;;
+    "aks")
+      lb_annotation='service.beta.kubernetes.io/azure-load-balancer-internal: "true"'
+      ;;
+    "gke")
+      lb_annotation='cloud.google.com/load-balancer-type: "Internal"'
+      ;;
+    *)
+      echo "Warning: Unknown cluster type '$cluster_type'. Defaulting to no internal load balancer annotation."
+      ;;
+  esac
+
+  cat << EOF > "$filename"
+apiVersion: v1
+kind: Service
+metadata:
+  name: cfosvipjuiceshopinternal
+  namespace: default
+  annotations:
+EOF
+  if [ -n "$lb_annotation" ]; then
+    cat << EOF >> "$filename"
+    $lb_annotation
+EOF
+  fi
+cat << EOF >> "$filename"
+spec:
+  selector:
+    app: firewall
+  ports:
+    - protocol: TCP
+      port: 3000    # The port that the service will expose
+      targetPort: 3000 # The port on the Pod that the service should forward traffic to
+  type: LoadBalancer    # Specify that this service is of type LoadBalancer
+  sessionAffinity: ClientIP
+EOF
+  kubectl apply -f "$filename"
+}
+
 function create_internallb_juiceshop() {
 filename="cfosvipjuiceshopinternal.yaml"
 cat << EOF > $filename
@@ -141,11 +215,13 @@ spec:
       port: 3000         # The port that the service will expose
       targetPort: 3000   # The port on the Pod that the service should forward traffic to
   type: LoadBalancer      # Specify that this service is of type LoadBalancer
+  sessionAffinity: ClientIP
 EOF
 kubectl apply -f $filename
 }
 
 function create_externallb_juiceshop() {
+local dnslabel="${1:-'service.beta.kubernetes.io/azure-dns-label-name: cfostest'}"
 filename="cfosvipjuiceshopinternal.yaml"
 cat << EOF > $filename
 apiVersion: v1
@@ -153,7 +229,8 @@ kind: Service
 metadata:
   name: cfosvipjuiceshopexternal
   namespace: default
-  annotations:
+  annotations: 
+    $dnslabel
 spec:
   selector:
     app: firewall
@@ -162,6 +239,7 @@ spec:
       port: 3000         # The port that the service will expose
       targetPort: 3000   # The port on the Pod that the service should forward traffic to
   type: LoadBalancer      # Specify that this service is of type LoadBalancer
+  sessionAffinity: ClientIP
 EOF
 kubectl apply -f $filename
 }
@@ -174,7 +252,7 @@ cat << EOF > $filename1
 apiVersion: v1
 kind: Service
 metadata:  
-  name: cfostest-headless
+  name: cfostest-vip-juiceshop
 spec:
   clusterIP: $cfosClusterIPAddress
   sessionAffinity: ClientIP
@@ -215,7 +293,7 @@ data:
   config: |-
     config firewall vip
            edit $juiceshopvipname
-            set extip "cfostest-headless.$cfosnamespace.svc.cluster.local"
+            set extip "cfostest-vip-juiceshop.$cfosnamespace.svc.cluster.local"
             set type $svctype
             set service "ALL"
             set mappedip $juiceshopclusterip
@@ -228,7 +306,7 @@ data:
 EOF
 
 kubectl apply -f $filename2  -n $cfosnamespace || echo kubectl apply -f $filename2 -n $cfosnamespace failed
-#$curl http://cfostest-headless.default.svc.cluster.local 3000
+#$curl http://cfostest-vip-juiceshop.default.svc.cluster.local 3000
 }
 
 function create_juiceshopvip_firewallpolicyconfigmap() {
@@ -2104,7 +2182,7 @@ EOF
 kubectl apply -f $filename || failed to apply configmap $filename
 }
 
-delete_cluster() {
+delete_cluster_eks() {
     echo "Starting cluster deletion process..."
     
     # Check if cluster exists first
@@ -2200,6 +2278,8 @@ print_usage() {
     echo "  sendAttacktocFOSheadlesssvc         - send attack to cFOSheadlesssvc for ingress security test" 
     echo "  sendWebftoExternal                  - send webf to external for egress security test"
     echo "  sendAttackToClusterIP               - send attack traffic to clusterip svc for egress security test"
+    echo "  createinteralSLBforjuiceship        - createinternalslbforjuiceshop and send ips traffic"  
+    echo "  sendTrafficToLB                     - send attack traffic to both internal and external lb for ingress security test"
     exit 1
 }
 
@@ -2211,10 +2291,10 @@ fi
 
 # Set region based on second argument
 if [ "$2" == "china" ]; then
-	echo 'skipped for non-aws cluster'
+	echo ''
 #    set_china_aws_variable
 else
-	echo 'skipped for non-aws cluster'
+	echo ''
 #    set_global_aws_variable
 fi
 
@@ -2222,7 +2302,7 @@ fi
 case "$1" in
     demo)
       CFOSLICENSEYAMLFILE="cfos_license.yaml"
-      create_aks_cluster ||  echo createGkecluster failed  
+       create_aks_cluster ||  echo createGkecluster failed  
        add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
        add_label_to_node "agentpool=worker" "security=true" || exit 1
 
@@ -2282,9 +2362,15 @@ case "$1" in
 
     sendAttackToClusterIP)
        sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
-
         ;;
-
+    createinteralSLBforjuiceship)
+        create_internallb_juiceshop_new "aks"
+        create_externallb_juiceshop "service.beta.kubernetes.io/azure-dns-label-name: cfostestjuiceshop"
+        #cfostestjuiceshop.westus.cloudapp.azure.com  
+        ;; 
+    sendTrafficToLB)
+        send_traffic_to_lb "app=diag2" "backend" "ip"
+        ;; 
     *)    
         print_usage
         ;;

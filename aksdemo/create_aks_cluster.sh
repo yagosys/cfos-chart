@@ -24,6 +24,7 @@ az aks create \
     --network-plugin azure \
     --service-cidr  10.96.0.0/16 \
     --dns-service-ip 10.96.0.10 \
+    --enable-node-public-ip \
     --nodepool-name worker \
     --nodepool-labels nested=true linux=true
 
@@ -38,13 +39,14 @@ az aks nodepool add \
     --labels nested=true linux=true \
     --node-count 1 
 #
-az network public-ip create \
-    --resource-group $resourcegroupname \
-    --name $PUBLICIPNAME \
-    --sku Standard \
-    --allocation-method static
+#
+#az network public-ip create \
+#    --resource-group $resourcegroupname \
+#    --name $PUBLICIPNAME \
+#    --sku Standard \
+#    --allocation-method static
 
-az network public-ip show --resource-group $resourcegroupname --name $PUBLICIPNAME --query ipAddress --output tsv
+#az network public-ip show --resource-group $resourcegroupname --name $PUBLICIPNAME --query ipAddress --output tsv
 
 #
 CLIENT_ID=$(az aks show --name $clustername --resource-group $resourcegroupname --query identity.principalId -o tsv)
