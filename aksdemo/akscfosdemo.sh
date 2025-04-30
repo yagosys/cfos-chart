@@ -1190,7 +1190,7 @@ check_aws_profile() {
 function deploy_demo_pod() {
 local juiceshopClusterIPAddress=$1
 create_and_apply_juiceshop_yaml $juiceshopClusterIPAddress
-create_and_apply_diag2_yaml "notprotectedby: cfos"
+create_and_apply_diag2_yaml "protectedby: cfos"
 }
 
 function send_attack_traffic() {
