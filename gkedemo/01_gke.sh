@@ -3,7 +3,7 @@
 [[ $networkName == "" ]] && networkName="gkenetwork"
 [[ $subnetName == "" ]] && subnetName="gkenode"
 [[ $machineType == "" ]] && machineType="e2-standard-2"
-[[ $num_nodes == "" ]] && num_nodes="1"
+[[ $num_nodes == "" ]] && num_nodes="2"
 [[ $services_ipv4_cidr == "" ]] && services_ipv4_cidr="10.144.0.0/20"
 [[ $cluster_ipv4_cidr == "" ]] && cluster_ipv4_cidr="10.140.0.0/14"
 #[[ $cluster_version == "" ]] && cluster_version=$(gcloud container get-server-config --zone us-central1-a --format=json | jq 'first(.validMasterVersions[] | select(startswith("1.26.5")))')
@@ -48,6 +48,7 @@ gcloud container clusters create $gkeClusterName  \
        	--max-surge-upgrade 1 \
 	--max-unavailable-upgrade 0 \
 	--enable-shielded-nodes \
+        --enable-network-policy \ 
 	--services-ipv4-cidr $services_ipv4_cidr \
         --cluster-ipv4-cidr  $cluster_ipv4_cidr || echo cluster exist already
 EOF
