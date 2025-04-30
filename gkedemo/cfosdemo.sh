@@ -43,7 +43,7 @@ runcli GREEN az aks get-credentials -g  cfosdemowandy  -n $(whoami)-aks-cluster 
 function get_gkecluster_credentail() {
 local clustername="${1-:my-first-cluster-1}"
 local zone="${2-:us-central1-a}"
-runcli GREEN gcloud components install gke-gcloud-auth-plugin || echo install failed
+#runcli GREEN gcloud components install gke-gcloud-auth-plugin || echo install failed
 runcli GREEN gcloud container clusters get-credentials $clustername --zone $zone
 
 }
