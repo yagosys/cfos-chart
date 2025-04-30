@@ -1,5 +1,11 @@
 #!/bin/bash  -e
 
+function create_gke_cluster() {
+./00_a_gcloud_env.sh || echo failed 
+./00_create_network.sh || echo failed 
+./01_gke.sh || echo failed
+}
+
 function gke_network_policy_allow_default_security_namespace() {
 
 filename="allowdefaultnamespacetosecuirtynamespace.yaml" 
@@ -77,7 +83,7 @@ applyCFOSLicense || exit 1
 
 deploy_cfos_with_agent "cfos7210250-deployment-new"  || exit 1
 
-
+sleep 10
 updatecFOSsignuatre 
 
 create_ingress_demo || echo create_ingress_demo exit
@@ -102,11 +108,11 @@ send_traffic_to_lb "app=diag2" "backend" "ip"
         check_cFOS_log "${log_files[@]}" "app=firewall" 10
 
 #traffic directly to juiceshop svc is allowed and not protected. 
-sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
+#sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
 
 #this disable traffic from backend to security namespace with GKE nework policy 
-gke_network_policy_allow_default_security_namespace 
-sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
+#gke_network_policy_allow_default_security_namespace 
+#sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
  
 #egressse security
 #send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
@@ -352,7 +358,7 @@ helm repo add cfos-chart https://yagosys.github.io/cfos-chart
 helm repo update
 helm search repo cfos-chart
 runcli GREEN helm upgrade --install $deploymentname cfos-chart/cfos \
-  --set routeManager.enabled=true \
+  --set routeManager.enabled=false \
   --set dnsConfig.nameserver=$kube_dns_ip \
   --set-string nodeSelector.security="true" \
   --set-string routeManager.env.CLUSTER_ROUTE_DST=$CLUSTER_ROUTE_DST \
@@ -2581,6 +2587,7 @@ delete_cluster_eks() {
 print_usage() {
 echo "demo                 - demo on k8s cluster for both ingress and egress use case"
 echo "createAKScluster     - create AKS cluster"
+echo "createGKEcluster     - create GKE cluster"
 echo "addlabel             - add node app=true and security=true to each node"
 echo "applyCFOSLicense     - Apply cFOS licene file cfos_license.yaml"  
 echo "createcFOSlicensefile- create cFOS licenseconfigmap file from .lic file" 
@@ -2620,6 +2627,9 @@ case "$1" in
        ;;
     createAKScluster)
        create_aks_cluster "westus" "cfosdemowandy" || echo create_aks_cluster failed 
+       ;;
+    createGKEcluster)
+       create_gke_cluster
        ;;
     addlabel)
        #add_label_to_node "agentpool=ubuntu" "app=true" || echo command skipped
@@ -2667,7 +2677,7 @@ case "$1" in
     checkCFOSLog)
 
         log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
-        check_cFOS_log "${log_files[@]}" "app=firewall" 3
+        check_cFOS_log "${log_files[@]}" "app=firewall" 10
 
         ;; 
     deleteCFOSandAgent)
