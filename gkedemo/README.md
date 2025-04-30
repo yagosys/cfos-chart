@@ -288,6 +288,26 @@ date=2025-04-24 time=00:56:41 eventtime=1745456201 tz="+0000" logid="0419016384"
 ./cfosdemo.sh  demo
 ```
 
+### demo script  
+```
+./cfosdemo.sh 
+❌ wrong command
+demo                 - demo on k8s cluster for both ingress and egress use case
+addlabel             - add node app=true and security=true to each node
+applyCFOSLicense     - Apply cFOS licene file cfos_license.yaml
+createcFOSlicensefile- create cFOS licenseconfigmap file from .lic file
+deploycFOSwithAgent  - Deploy CFOS and vxlan agent with helm chart
+createIngressDemo    - createIngressDemo for juiceshop
+sendAttacktocFOSSVC  - send attack to cFOSheadlesssvc for ingress security test
+sendWebftoExternal   - send webf to external for egress security test
+sendAttackToClusterIP- send attack traffic to clusterip svc for egress security test
+createSLB            - createinternalslbforjuiceshop and send ips traffic
+sendTrafficToLB      - send attack traffic to both internalexternal lb for ingress security test
+checkCFOSLog         - check cFOS log, policy10 is ingress policy, policy300 is egress policy
+deleteCFOSandAgent   - deleteCFOSandAgent
+getKubeConfig        - get GKE cluster kubeconfig
+gkeNetworkPolicy1    - only allow default namespace to access security namespace
+```
 ### delete cluster
 
 ```bash
