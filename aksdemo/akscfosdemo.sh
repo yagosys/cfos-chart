@@ -60,8 +60,9 @@ case "$cluster_type" in
       ;;
     "aks")
      #create_aks_cluster "westus" "cfosdemowandy" || echo create_aks_cluster failed 
-     add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
-     add_label_to_node "agentpool=worker" "security=true" || exit 1
+     add_label_to_node "kubernetes.io/os=linux" "security=true" "app=true" || echo command skipped 
+     #add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
+     #add_label_to_node "agentpool=worker" "security=true" || exit 1
       ;;
     "gke")
      get_gkecluster_credentail my-first-cluster-1 us-central1-a 
@@ -85,7 +86,9 @@ create_ingress_demo || echo create_ingress_demo exit
 create_internallb_juiceshop_new $cluster_type
 runcli GREEN kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' --timeout=5m service/cfosvipjuiceshopinternal
 
-create_externallb_juiceshop #service.beta.kubernetes.io/azure-dns-label-name: cfostestjuiceshop
+create_externallb_juiceshop $cluster_type
+ #service.beta.kubernetes.io/azure-dns-label-name: cfostestjuiceshop
+
 
 runcli GREEN kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' --timeout=5m service/cfosvipjuiceshopexternal
 
@@ -108,11 +111,11 @@ sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_
 gke_network_policy_allow_default_security_namespace 
 sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
  
-#egressse security
-#send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
+egressse security
+send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
 
-#log_files=("webf.0")
-#check_cFOS_log "${log_files[@]}" "app=firewall" 3
+log_files=("webf.0")
+check_cFOS_log "${log_files[@]}" "app=firewall" 3
 
 }
 
@@ -270,6 +273,7 @@ myaz aks create \
     --node-vm-size $INSTANCETYPE \
     --vm-set-type VirtualMachineScaleSets \
     --network-plugin azure \
+    --network-policy azure \
     --service-cidr  10.96.0.0/16 \
     --dns-service-ip 10.96.0.10 \
     --enable-node-public-ip \
@@ -282,6 +286,7 @@ myaz aks nodepool add \
     --os-type Linux \
     --node-vm-size $INSTANCETYPE \
     --name ubuntu \
+    --enable-node-public-ip \
     --labels nested=true linux=true \
     --node-count 1 
 
@@ -371,6 +376,8 @@ function create_internallb_juiceshop_new() {
 if [[ -z $cluster_type ]] ; then 
 kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kubeletVersion' | grep -q "gke" && cluster_type="gke" 
 
+kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kernelVersion' | grep -q "azure" && cluster_type="aks"
+
 fi 
 runcli GREEN echo cluster_type is $cluster_type 
 
@@ -444,6 +451,8 @@ filename="cfosvipjuiceshopexternal.yaml"
 local cluster_type="$1" 
 if [[ -z $cluster_type ]] ; then
 kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kubeletVersion' | grep -q "gke" && cluster_type="gke"
+
+kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kernelVersion' | grep -q "azure" && cluster_type="aks"
 
 fi
 runcli GREEN echo cluster_type is $cluster_type 
