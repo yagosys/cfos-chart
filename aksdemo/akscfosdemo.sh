@@ -107,11 +107,8 @@ send_traffic_to_lb "app=diag2" "backend" "ip"
 #traffic directly to juiceshop svc is allowed and not protected. 
 sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
 
-#this disable traffic from backend to security namespace with GKE nework policy 
-gke_network_policy_allow_default_security_namespace 
-sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
  
-egressse security
+#egressse security
 send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
 
 log_files=("webf.0")
