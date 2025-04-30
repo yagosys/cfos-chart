@@ -4,7 +4,6 @@
 ./00_a_gcloud_env.sh
 ./00_create_network.sh
 ./01_gke.sh
-./02_modifygkevmipforwarding.sh.shell.sh
 ```
 
 ### add label to worker node for deploy cFOS
@@ -159,6 +158,33 @@ data:
        end
 ```
 
+there is other way to config vip which use access-proxy instead static-nat 
+this way does not require to config extip. so no need use headless svc for cfos.
+
+```bash
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfosconfigvipjuiceshop
+  labels:
+      app: fos
+      category: config
+data:
+  type: partial
+  config: |-
+    config firewall vip
+           edit juiceshop
+            set type access-proxy
+            set service "ALL"
+            set mappedip 10.144.0.252
+            set extintf "eth0"
+            set portforward enable
+            set extport "3000"
+            set mappedport "3000"
+           next
+       end
+```
+
 then apply this yaml
 ```bash
 k apply -f cfosconfigmapforjuiceshop.yaml
@@ -259,7 +285,7 @@ date=2025-04-24 time=00:56:41 eventtime=1745456201 tz="+0000" logid="0419016384"
 
 ### full demo with script
 ```
-./gkecfosdemo.sh  demo
+./cfosdemo.sh  demo
 ```
 
 ### delete cluster
