@@ -48,9 +48,9 @@ gcloud container clusters create $gkeClusterName  \
        	--max-surge-upgrade 1 \
 	--max-unavailable-upgrade 0 \
 	--enable-shielded-nodes \
-        --enable-network-policy \ 
+        --enable-network-policy \
 	--services-ipv4-cidr $services_ipv4_cidr \
-        --cluster-ipv4-cidr  $cluster_ipv4_cidr || echo cluster exist already
+        --cluster-ipv4-cidr  $cluster_ipv4_cidr || echo cluster creation failed
 EOF
 chmod +x $filename
 
