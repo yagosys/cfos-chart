@@ -9,7 +9,9 @@ cfos_license.yaml
 
 ## run demo 
 
+
 ```bash
+./akscfosdemo.sh createAKScluster
 ./akscfosdemo.sh demo
 ```
 
