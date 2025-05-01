@@ -1,6 +1,29 @@
 #!/bin/bash  -e
 
 
+function create_app_control_demo1_configmap() {
+filename="cfosconfigmapappcontroldemo1.yaml"
+cat << EOF > $filename1
+apiVersion: v1
+data:
+  config: |-
+    config firewall policy
+        edit 300
+            set application-list "demo1"
+        next
+    end
+  type: partial
+kind: ConfigMap
+metadata:
+  labels:
+    app: fos
+    category: config
+  name: appcontrolprofiledemo1
+EOF
+runcli GREEN kubectl apply -f $filename
+}
+
+
 function cleancfoslog() {
   local logfiles=("${@:1:$#-2}") # Capture all but the last two arguments as log files
   local label="${@:$#-1:1}"      # Second-to-last argument
@@ -147,6 +170,7 @@ sendattack_to_headlesssvc_cfos "${attacktype[@]}"
 runcli CYAN echo "now running ingress security use case -traffic destinated to both internal and exernal loadbalancer address which use cFOS VIP as backend" 
 
 
+        send_traffic_to_lb "app=diag2" "backend" "ip" "normal" 
         send_traffic_to_lb "app=diag2" "backend" "ip" "log4j" 
         send_traffic_to_lb "app=diag2" "backend" "ip" "shellshock" 
         send_traffic_to_lb "app=diag2" "backend" "ip" "xss"
@@ -159,18 +183,22 @@ runcli CYAN echo "now running ingress security use case -traffic destinated to b
 
 runcli CYAN echo "now running egress security use case -egress traffic from one namespace to other namespace in same cluster (east-west use case )"
 
-attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection")  
+attacktype=("normal" "log4j" "shellshock" "xss" "user_agent_malware" "sql_injection" "normalfileupload" "segdownload" "eicarupload")  
 
 sendattack_to_clusteripsvc "juiceshop-service" "security" "${attacktype[@]}" || echo "sendattack_to_clusteripsvc failed"
 
 
  
 runcli CYAN echo now runnning egressse security use case -webfiltering 
-urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org") 
+urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org" "https://www.youtube.com") 
 send_waf_attack "app=diag2" "backend" "${urllist[@]}" || echo send_waf_attack exit
 
 log_files=("webf.0")
 check_cFOS_log "${log_files[@]}" "app=firewall" 3
+
+log_files=("app.0")
+check_cFOS_log "${log_files[@]}" "app=firewall" 1
+
 
 runcli CYAN echo now runnning egressse security use case - malicious traffic to external website
 
@@ -271,6 +299,7 @@ function create_ingress_demo() {
         #create_cfos_headlessvc "None"
         create_juiceshop_vip_configmap $juiceshopClusterIPAddress $svctype
         create_juiceshopvip_firewallpolicyconfigmap
+        create_app_control_demo1_configmap
 }
 
 function send_waf_attack() {
@@ -295,7 +324,7 @@ function sendattack_to_clusteripsvc() {
 
     for attack in "${attack_types[@]}"; do
         if [ "$attack" = "eicarupload" ]; then
-            send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "virus.0"  || exit 1
+            send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "virus.0"  || echo "failed to send traffic" 
         else
             send_attack_traffic 'app=diag2' 'backend' "$targetsvcname" "$targetnamespace" "$attack" "ips.0"  || echo "failed to send traffic"
         fi
@@ -644,6 +673,7 @@ data:
       edit "default"
         set comment "block http file upload"
         set extended-log enable
+        set app-replacemsg disable
           config entries
              edit 1
                 set category 15
@@ -662,6 +692,7 @@ data:
       edit "demo1"
         set comment "block http file upload"
         set extended-log enable
+        set app-replacemsg disable
           config entries
              edit 1
                 set category 15
@@ -671,6 +702,10 @@ data:
              edit 2
                 set category 15
                 set application 17136
+                set action block
+             next
+             edit 3
+                set category 5
                 set action block
              next
           end
@@ -1265,35 +1300,15 @@ test_diag2 "$@"
 }
 
 function updatecFOSsignuatre() {
-  local tries=0
-  local max_tries=10
-  local result=1
   local cfos_pod_name
 
-  while (( tries++ < max_tries && result != 0 )); do
     cfos_pod_name=$(kubectl get pods -l app=firewall -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
 
-    if [[ -n "$cfos_pod_name" ]]; then
-      echo "Attempting to update signature on pod: $cfos_pod_name (try $tries/$max_tries)..."
-      if kubectl exec -it "po/$cfos_pod_name" -- update; then
-        result=0
-        echo "Signature update successful on pod: $cfos_pod_name after $tries tries."
-      else
-        result=$? # Capture the exit code of the failed command
-        echo "Update failed on pod: $cfos_pod_name (exit code: $result). Retrying..."
-        sleep $((tries * 2))
-      fi
-    else
-      echo "Warning: No running pod found with label 'app=firewall'. Retrying..."
-      sleep $((tries * 2))
-    fi
-  done
-
-  if (( result != 0 )); then
-    echo "Error: Failed to update cFOS signature after $max_tries tries."
-    return 1
-  fi
-  return 0
+for i in {1..3}; do
+      kubectl exec -it "po/$cfos_pod_name" -c cfos --  update  > /dev/null 2>&1   || echo update failed 
+      kubectl exec -it "po/$cfos_pod_name" -c cfos -- more /data/etc/upd.dat | jq .
+      sleep 5
+done
 }
 
 function check_cFOS_log() {
@@ -1349,11 +1364,11 @@ function test_diag2() {
         local logfile_name="ips.0"
         ;;
     normalfileupload)
-        local payload='curl  -k --max-time 5 -v -F "file=@/etc/passwd"'
+        local payload='curl  -k --max-time 5  -F "file=@/etc/passwd"'
         local logfile_name="app.0"
         ;;
     segdownload)
-	local payload='curl -v -k  -r 250000-499999'
+	local payload='curl -k --max-time 5 -r 250000-499999'
 	local logfile_name="app.0"
 	;;
     xss)
@@ -1696,6 +1711,7 @@ runcli GREEN kubectl delete svc juiceshop-service -n security || echo delete fai
     echo delete webprofileerrorpass configmap 
     kubectl delete cm demo1configmap || echo failed to delete cm demo1configmap
 
+    kubectl delete cm appcontrolprofiledemo1 || echo failed to delete appcontrolprofiledemo1
     kubectl delete cm cfosconfigpolicyforjuiceshopvip || echo failed to delete cm 
     kubectl delete cm cfosconfigvipjuiceshop  || echo failed to delete cm
 
@@ -2724,7 +2740,7 @@ case "$1" in
 
         ;;
     sendWebftoExternal)
-       urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org") 
+       urllist=("https://www.fortiguard.com/wftest/26.html" "https://120.wap517.biz" "https://www.casino.org" "https://www.youtube.com") 
        send_waf_attack "app=diag2" "backend" "${urllist[@]}" || echo send_waf_attack exit
         ;;
 
@@ -2771,6 +2787,9 @@ case "$1" in
        ;;
     gkeNetworkPolicy1)
        gke_network_policy_allow_default_security_namespace
+       ;;
+    updatecFOSsignuatre)
+       updatecFOSsignuatre
        ;;
     *)    
        print_usage
