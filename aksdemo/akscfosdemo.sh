@@ -3,7 +3,7 @@
 
 function create_app_control_demo1_configmap() {
 filename="cfosconfigmapappcontroldemo1.yaml"
-cat << EOF > $filename1
+cat << EOF > $filename
 apiVersion: v1
 data:
   config: |-
