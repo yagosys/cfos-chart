@@ -1747,7 +1747,7 @@ deploy_local_path_provisioner() {
 }
 
 create_license_configmap() {
-    local input_file=$1
+    local input_file=$2
     local output_file="cfos_license.yaml"
 
     if [ -f "$output_file" ]; then
@@ -2643,7 +2643,7 @@ case "$1" in
         deploy_demo_pod $juiceshopClusterIPAddress || exit 1
         ;;
     createcFOSlicensefile)
-        create_license_configmap || exit 1
+        create_license_configmap $@ || exit 1
 	;;
     applyCFOSLicense)
 	CFOSLICENSEYAMLFILE="cfos_license.yaml"
